@@ -645,6 +645,7 @@ export default function App() {
   const [isCreating, setIsCreating] = useState(false);
   const [selectedMemo, setSelectedMemo] = useState<Memo | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<MemoType | '全部'>('全部');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
@@ -783,10 +784,14 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  const filteredMemos = memos.filter(m => 
-    m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMemos = memos
+    .filter(m => {
+      const matchesSearch = m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           m.content.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = filterType === '全部' || m.type === filterType;
+      return matchesSearch && matchesType;
+    })
+    .sort((a, b) => b.timestamp - a.timestamp);
 
   const handleSaveApiKey = () => {
     localStorage.setItem('gemini_api_key', apiKey);
@@ -809,13 +814,36 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="relative">
+          <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text" placeholder="搜索" value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-black/5 rounded-xl py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-[#007AFF]/20 transition-all"
             />
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar -mx-2 px-2">
+            <button
+              onClick={() => setFilterType('全部')}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all",
+                filterType === '全部' ? "bg-[#007AFF] text-white shadow-sm" : "bg-white text-gray-500 border border-black/5"
+              )}
+            >
+              全部
+            </button>
+            {MEMO_TYPES.map(t => (
+              <button
+                key={t}
+                onClick={() => setFilterType(t)}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all",
+                  filterType === t ? "bg-[#007AFF] text-white shadow-sm" : "bg-white text-gray-500 border border-black/5"
+                )}
+              >
+                {t}
+              </button>
+            ))}
           </div>
         </header>
         <main className="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar">
