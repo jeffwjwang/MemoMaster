@@ -143,16 +143,23 @@ async function analyzeMemo(
   ${currentTimeContext}
   请利用上述当前时间背景，智能解析用户提到的相对时间（如“明天”、“下周一”、“后天晚上”等）。
 
+  **核心原则：严禁虚构内容 (STRICT NO HALLUCINATION)**
+  - 你只能基于用户提供的文字、图片或语音内容进行整理。
+  - **严禁生成用户未提及的任务、计划、待办事项或未来行动**。
+  - 除非是“任务清单”或“会议纪要”类型且内容中确实包含明确的任务，否则禁止使用 "todo" 块。
+  - 对于“好文收藏”，你的目标是“理解”和“分析”现有的内容精髓，**绝对禁止**虚构“后续计划”或“学习建议”。
+
   可用块类型：
-  1. "todo": 专门用于任务清单。必须按类别归类（如：会议、碰面、资料准备、健身、生活、娱乐、饭局等）。
+  1. "todo": 仅用于内容中明确提到的任务。必须按类别归类。
   2. "highlight": 用于核心金句、最重要的结论或定义。
-  3. "step": 用于有先后顺序的步骤、逻辑推导或时间线。
-  4. "bento": 用于并列的多个要点、分类说明，适合网格展示。
-  5. "text": 用于普通的段落描述。
+  3. "quote": 用于摘录原文/原图中的精彩片段。
+  4. "step": 用于有先后顺序的步骤、逻辑推导或时间线。
+  5. "bento": 用于并列的多个要点、分类说明，适合网格展示。
+  6. "text": 用于普通的段落描述。
 
   任务清单(todo)要求：
   - 必须包含：任务内容(task)、预计时间(time)、注意要点(notes)。
-  - **时间格式(time)**：必须包含具体的日期、星期几和时间。格式示例：“2026年3月1日 周日 14:00”。如果用户没提到具体时间，请根据语境合理推测或仅显示日期和星期。
+  - **时间格式(time)**：必须包含具体的日期、星期几和时间。格式示例：“2026年3月1日 周日 14:00”。
   - 初始状态 completed 必须为 false。
   - 必须根据任务性质归类到合适的标题下。
 
@@ -906,6 +913,13 @@ export default function App() {
 
               <h2 className="text-3xl font-bold mb-6">{selectedMemo.title}</h2>
               
+              {selectedMemo.blocks && selectedMemo.content && (
+                <div className="mb-8 p-6 bg-[#007AFF]/5 rounded-3xl border border-[#007AFF]/10">
+                  <h4 className="text-[10px] font-bold text-[#007AFF] uppercase tracking-widest mb-3 opacity-60">AI 核心解读</h4>
+                  <p className="text-lg font-medium text-gray-800 leading-relaxed">{selectedMemo.content}</p>
+                </div>
+              )}
+
               {selectedMemo.rawText && selectedMemo.type === '好文收藏' && (
                 <div className="mb-8 p-4 bg-black/5 rounded-2xl border border-black/5">
                   <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">原文内容</h4>
