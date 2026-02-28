@@ -218,7 +218,27 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
     }
   };
 
-  const handleSave = async () => {
+  const handleDirectSave = () => {
+    if (!text && !image && !audio) return;
+    
+    // Extract title from first line of text or use a default
+    const firstLine = text.split('\n')[0].trim();
+    const title = firstLine.length > 0 ? (firstLine.length > 20 ? firstLine.substring(0, 20) + '...' : firstLine) : '新备忘录';
+    
+    onSave({
+      id: Date.now().toString(),
+      type,
+      title,
+      content: text || (image ? "图片备忘" : "语音备忘"),
+      rawText: text,
+      imageUrl: image,
+      audioUrl: audio,
+      timestamp: Date.now(),
+    });
+    onClose();
+  };
+
+  const handleAISave = async () => {
     if (!text && !image && !audio) return;
     setIsAnalyzing(true);
     try {
@@ -254,13 +274,22 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
       <div className="ios-blur sticky top-0 px-4 py-3 flex items-center justify-between">
         <button onClick={onClose} className="text-[#007AFF] text-lg font-medium ios-button">取消</button>
         <h2 className="text-lg font-semibold">新建备忘录</h2>
-        <button
-          onClick={handleSave}
-          disabled={(!text && !image && !audio) || isAnalyzing}
-          className={cn("text-[#007AFF] text-lg font-semibold ios-button disabled:opacity-30", isAnalyzing && "flex items-center gap-2")}
-        >
-          {isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : "完成"}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleDirectSave}
+            disabled={(!text && !image && !audio) || isAnalyzing}
+            className="text-gray-500 text-sm font-medium ios-button disabled:opacity-30"
+          >
+            直接保存
+          </button>
+          <button
+            onClick={handleAISave}
+            disabled={(!text && !image && !audio) || isAnalyzing}
+            className={cn("text-[#007AFF] text-sm font-bold ios-button disabled:opacity-30", isAnalyzing && "flex items-center gap-1")}
+          >
+            {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "AI 整理"}
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         <section>
