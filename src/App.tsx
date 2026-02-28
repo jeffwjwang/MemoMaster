@@ -85,11 +85,21 @@ async function compressImage(base64Str: string, maxWidth = 800, quality = 0.7): 
 type MemoType = '灵感记录' | '会议纪要' | '日常随笔' | '任务清单' | '英语拾贝';
 const MEMO_TYPES: MemoType[] = ['灵感记录', '会议纪要', '日常随笔', '任务清单', '英语拾贝'];
 
+type BlockType = 'text' | 'list' | 'highlight' | 'step' | 'bento';
+
+interface ContentBlock {
+  type: BlockType;
+  title?: string;
+  content: string | string[];
+  color?: 'blue' | 'emerald' | 'amber' | 'violet' | 'rose' | 'slate';
+}
+
 interface Memo {
   id: string;
   type: MemoType;
   title: string;
-  content: string;
+  content: string; // Keep for backward compatibility/fallback
+  blocks?: ContentBlock[]; // New structured content
   rawText?: string;
   imageUrl?: string;
   audioUrl?: string;
@@ -116,60 +126,46 @@ async function analyzeMemo(
   const ai = new GoogleGenAI({ apiKey });
   const model = "gemini-3-flash-preview";
   
-  let systemInstruction = `你是一位专业的笔记整理专家。请分析以下输入的 ${type} 内容，并将其整理成专业、结构化的笔记。
-  输入可能包含文字、图片或语音录音。
-  - 如果有语音录音，请先将其转录并理解其含义。
-  - 如果有图片，请结合图片内容进行分析。
-  - 请务必使用中文回复（除非是英语学习相关内容），并以 Markdown 格式返回结果，包含一个清晰的标题。`;
+  let systemInstruction = `你是一位顶级的视觉化笔记专家。你的任务是将用户的输入整理成极其结构化、视觉化的笔记。
+  你必须根据内容逻辑，将笔记拆分为不同的“块(blocks)”。
+  
+  可用块类型：
+  1. "highlight": 用于核心金句、最重要的结论或定义。
+  2. "step": 用于有先后顺序的步骤、逻辑推导或时间线。
+  3. "bento": 用于并列的多个要点、分类说明，适合网格展示。
+  4. "text": 用于普通的段落描述。
+  5. "list": 用于普通的清单。
 
+  颜色分配建议：
+  - 蓝色(blue): 逻辑、冷静、技术
+  - 绿色(emerald): 成功、积极、自然
+  - 黄色(amber): 警告、重点、灵感
+  - 紫色(violet): 创意、深度、总结
+  
+  请务必使用中文回复，并严格遵守 JSON 格式。`;
+
+  // ... (rest of the system instruction logic remains similar but adapted for blocks)
   switch (type) {
     case '灵感记录':
-      systemInstruction += `\n重点：解释这个灵感的具体内容，分析其独特性，并详细说明这个灵感可以应用在哪些具体的场景或领域。`;
+      systemInstruction += `\n重点：使用 highlight 块展示核心灵感，使用 bento 块展示应用场景。`;
       break;
     case '会议纪要':
-      systemInstruction += `\n重点：记录会议的主旨（Theme）、讨论的关键要点（Key Points），并明确列出后续跟进事项（Follow-ups）及责任人。`;
-      break;
-    case '日常随笔':
-      systemInstruction += `\n重点：忠实地反映用户当时的想法和情感，保持原汁原味，仅在排版上进行微调使其易于阅读。`;
+      systemInstruction += `\n重点：使用 step 块展示会议流程，使用 highlight 块展示决议。`;
       break;
     case '任务清单':
-      systemInstruction += `\n重点：按照 5W1H 框架（Who 负责人, What 任务内容, Where 地点, When 时间, Why 目的, How 执行方式）来详细分析和拆解这项任务。`;
+      systemInstruction += `\n重点：使用 step 块拆解任务，使用 bento 块展示 5W1H 要素。`;
       break;
     case '英语拾贝':
-      systemInstruction = `你是一位地道的英语老师。用户会输入中文短语或句子。
-      你的任务：
-      1. 分析该中文表达。
-      2. 提供 1-2 个最地道、**使用率极高**的英语表达方式（优先选择在现代口语或书面语中频繁出现的词汇/短语，避免生僻或过时的表达）。
-      3. 解释这些英语表达的用法、语境（如：正式 vs 非正式）或细微差别。
-      4. 为每个英语表达提供一个**非常实用、生活化**的例句。
-      请以 Markdown 格式返回，标题应为该中文短语的翻译。`;
+      systemInstruction += `\n重点：使用 highlight 块展示核心短语，使用 bento 块展示例句和语境。`;
       break;
   }
 
   const parts: any[] = [{ text: systemInstruction }];
-
-  if (text && text.trim() !== "") {
-    parts.push({ text: `文字内容: ${text}` });
-  }
-
-  if (imageB64) {
-    parts.push({
-      inlineData: {
-        mimeType: "image/jpeg",
-        data: imageB64.split(',')[1] || imageB64
-      }
-    });
-  }
-
+  if (text) parts.push({ text: `文字内容: ${text}` });
+  if (imageB64) parts.push({ inlineData: { mimeType: "image/jpeg", data: imageB64.split(',')[1] || imageB64 } });
   if (audioB64) {
     const mimeMatch = audioB64.match(/^data:(audio\/[a-z0-9]+);base64,/);
-    const mimeType = mimeMatch ? mimeMatch[1] : "audio/wav";
-    parts.push({
-      inlineData: {
-        mimeType,
-        data: audioB64.split(',')[1] || audioB64
-      }
-    });
+    parts.push({ inlineData: { mimeType: mimeMatch ? mimeMatch[1] : "audio/wav", data: audioB64.split(',')[1] || audioB64 } });
   }
 
   const response = await ai.models.generateContent({
@@ -180,23 +176,111 @@ async function analyzeMemo(
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          title: { type: Type.STRING, description: "备忘录的简短标题" },
-          content: { type: Type.STRING, description: "整理后的 Markdown 内容，使用真实的换行符而非转义字符" }
+          title: { type: Type.STRING },
+          summary: { type: Type.STRING, description: "一句话总结" },
+          blocks: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list"] },
+                title: { type: Type.STRING },
+                content: { 
+                  type: Type.ARRAY, 
+                  items: { type: Type.STRING },
+                  description: "如果是 text 或 highlight，数组只包含一个字符串；如果是 list, step 或 bento，数组包含多个项"
+                },
+                color: { type: Type.STRING, enum: ["blue", "emerald", "amber", "violet", "rose", "slate"] }
+              },
+              required: ["type", "content"]
+            }
+          }
         },
-        required: ["title", "content"]
+        required: ["title", "blocks"]
       }
     }
   });
 
-  let textResponse = response.text || "{}";
-  const result = JSON.parse(textResponse);
-  if (typeof result.content === 'string') {
-    result.content = result.content.replace(/\\n/g, '\n');
-  }
-  return result as { title: string; content: string };
+  return JSON.parse(response.text);
 }
 
 // --- Components ---
+
+function StructuredRenderer({ blocks }: { blocks: ContentBlock[] }) {
+  return (
+    <div className="space-y-6">
+      {blocks.map((block, idx) => {
+        const colorClasses = {
+          blue: "bg-blue-50 border-blue-100 text-blue-900",
+          emerald: "bg-emerald-50 border-emerald-100 text-emerald-900",
+          amber: "bg-amber-50 border-amber-100 text-amber-900",
+          violet: "bg-violet-50 border-violet-100 text-violet-900",
+          rose: "bg-rose-50 border-rose-100 text-rose-900",
+          slate: "bg-slate-50 border-slate-100 text-slate-900",
+        }[block.color || 'slate'];
+
+        const dotColor = {
+          blue: "bg-blue-500",
+          emerald: "bg-emerald-500",
+          amber: "bg-amber-500",
+          violet: "bg-violet-500",
+          rose: "bg-rose-500",
+          slate: "bg-slate-500",
+        }[block.color || 'slate'];
+
+        switch (block.type) {
+          case 'highlight':
+            return (
+              <motion.div 
+                key={idx}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={cn("p-6 rounded-3xl border shadow-sm", colorClasses)}
+              >
+                {block.title && <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2 opacity-60">{block.title}</h4>}
+                <p className="text-xl font-bold leading-relaxed">{block.content[0]}</p>
+              </motion.div>
+            );
+          case 'step':
+            return (
+              <div key={idx} className="space-y-4 relative pl-8 py-2">
+                <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-gray-200" />
+                {(block.content as string[]).map((step, sIdx) => (
+                  <div key={sIdx} className="relative">
+                    <div className={cn("absolute -left-[25px] top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm", dotColor)} />
+                    <p className="text-sm font-medium text-gray-700 leading-relaxed">{step}</p>
+                  </div>
+                ))}
+              </div>
+            );
+          case 'bento':
+            return (
+              <div key={idx} className="grid grid-cols-2 gap-3">
+                {(block.content as string[]).map((item, bIdx) => (
+                  <div key={bIdx} className={cn("p-4 rounded-2xl border flex flex-col justify-center min-h-[80px]", colorClasses)}>
+                    <p className="text-xs font-bold leading-snug">{item}</p>
+                  </div>
+                ))}
+              </div>
+            );
+          case 'list':
+            return (
+              <ul key={idx} className="space-y-3">
+                {(block.content as string[]).map((item, lIdx) => (
+                  <li key={lIdx} className="flex items-start gap-3 text-sm text-gray-600">
+                    <span className={cn("mt-1.5 w-1.5 h-1.5 rounded-full shrink-0", dotColor)} />
+                    <span className="leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            );
+          default:
+            return <p key={idx} className="text-sm text-gray-600 leading-relaxed">{block.content[0]}</p>;
+        }
+      })}
+    </div>
+  );
+}
 
 function MemoCard({ memo, onClick }: { memo: Memo; onClick: () => void }) {
   const date = new Date(memo.timestamp);
@@ -219,7 +303,11 @@ function MemoCard({ memo, onClick }: { memo: Memo; onClick: () => void }) {
       </div>
       <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">{memo.title}</h3>
       <div className="text-sm text-gray-600 line-clamp-3 mb-3 prose prose-sm">
-        <ReactMarkdown>{memo.content}</ReactMarkdown>
+        {memo.blocks ? (
+          <p>{memo.blocks.find(b => b.type === 'text' || b.type === 'highlight')?.content[0] || memo.content}</p>
+        ) : (
+          <ReactMarkdown>{memo.content}</ReactMarkdown>
+        )}
       </div>
       {memo.imageUrl && (
         <div className="mb-3 rounded-lg overflow-hidden h-24">
@@ -320,7 +408,8 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
         id: Date.now().toString(),
         type,
         title: analysis.title,
-        content: analysis.content,
+        content: analysis.summary || "",
+        blocks: analysis.blocks,
         rawText: text,
         imageUrl: image,
         audioUrl: audio,
@@ -680,6 +769,12 @@ export default function App() {
 
               <h2 className="text-3xl font-bold mb-6">{selectedMemo.title}</h2>
               
+              {selectedMemo.blocks ? (
+                <StructuredRenderer blocks={selectedMemo.blocks} />
+              ) : (
+                <div className="prose prose-slate max-w-none"><ReactMarkdown>{selectedMemo.content}</ReactMarkdown></div>
+              )}
+              
               {selectedMemo.imageUrl && (
                 <img 
                   src={selectedMemo.imageUrl} 
@@ -695,8 +790,6 @@ export default function App() {
                 </div>
               )}
 
-              <div className="prose prose-slate max-w-none"><ReactMarkdown>{selectedMemo.content}</ReactMarkdown></div>
-              
               {selectedMemo.rawText && (
                 <div className="mt-12 pt-6 border-t border-black/5 no-print">
                   <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">原始输入</h4>
