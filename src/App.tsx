@@ -563,7 +563,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-[#F2F2F7] relative overflow-hidden flex flex-col">
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col no-print">
         <header className="ios-blur sticky top-0 z-30 px-6 pt-12 pb-4">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold tracking-tight">备忘录</h1>
@@ -597,7 +597,7 @@ export default function App() {
             </div>
           )}
         </main>
-        <div className="ios-blur sticky bottom-0 px-6 py-4 flex justify-between items-center">
+        <div className="ios-blur sticky bottom-0 px-6 py-4 flex justify-between items-center no-print">
           <p className="text-xs text-gray-500 font-medium">{memos.length} 条备忘录</p>
           <button onClick={() => setIsCreating(true)} className="w-12 h-12 bg-[#007AFF] text-white rounded-full flex items-center justify-center shadow-lg shadow-[#007AFF]/30 ios-button">
             <Plus className="w-6 h-6" />
