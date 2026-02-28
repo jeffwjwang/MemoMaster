@@ -26,21 +26,29 @@
 
 /* Print Styles */
 @media print {
+  @page {
+    margin: 1.5cm;
+    size: auto;
+  }
+
   /* 1. Reset everything to white background and black text */
   * {
     background: transparent !important;
     color: black !important;
     box-shadow: none !important;
     text-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   html, body {
     background: white !important;
-    width: 100%;
+    width: 100% !important;
     height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
+    display: block !important;
   }
 
   /* 2. Hide all UI elements */
@@ -50,44 +58,48 @@
   .ios-blur,
   nav,
   .ios-settings-modal,
-  [role="button"] {
+  [role="button"],
+  .sticky {
     display: none !important;
   }
 
   /* 3. Target the specific content container */
-  #root {
+  #root, #root > div {
     display: block !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
   }
 
-  /* Hide the main app container if it's not the print content */
-  #root > div > div:not(:has(.print-content)) {
-    display: none !important;
-  }
-
-  /* Ensure the modal container is visible and positioned correctly */
+  /* Ensure the modal container flows naturally */
   .fixed.inset-0 {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    position: static !important;
+    display: block !important;
     width: 100% !important;
     height: auto !important;
-    display: block !important;
     background: white !important;
+    overflow: visible !important;
   }
 
   .print-content {
     display: block !important;
     width: 100% !important;
-    padding: 20px !important;
+    padding: 0 !important; /* Let @page margin handle it */
     margin: 0 !important;
     background: white !important;
     overflow: visible !important;
+    height: auto !important;
+    flex: none !important; /* Disable flex-1 */
   }
 
   /* Force text visibility in prose */
   .prose, .prose * {
     color: black !important;
     visibility: visible !important;
+    max-width: none !important; /* Allow full width */
   }
 
   h2, h3, h4, p, li, span {
@@ -97,15 +109,22 @@
 
   img {
     max-width: 100% !important;
+    height: auto !important;
     display: block !important;
-    margin: 10px 0 !important;
+    margin: 1cm 0 !important;
     page-break-inside: avoid;
   }
 
   /* Print-only header should be visible */
   .print-only-header {
     display: block !important;
-    margin-bottom: 20px !important;
-    border-bottom: 1px solid #eee !important;
+    margin-bottom: 1cm !important;
+    border-bottom: 2px solid #333 !important;
+    padding-bottom: 0.5cm !important;
+  }
+
+  /* Ensure page breaks work */
+  .prose p, .prose h2, .prose h3 {
+    page-break-inside: avoid;
   }
 }
