@@ -296,7 +296,7 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
     
     // Extract title from first line of text or use a default
     const firstLine = text.split('\n')[0].trim();
-    const title = firstLine.length > 0 ? (firstLine.length > 20 ? firstLine.substring(0, 20) + '...' : firstLine) : '新备忘录';
+    const title = firstLine.length > 0 ? (firstLine.length > 20 ? firstLine.substring(0, 20) + '...' : firstLine) : (image ? '图片备忘' : '语音备忘');
     
     onSave({
       id: Date.now().toString(),
@@ -436,30 +436,71 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
+  const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
+
   // Load from IndexedDB on mount
   useEffect(() => {
     getAllMemos().then(setMemos).catch(console.error);
   }, []);
 
-  const handleShare = async (memo: Memo) => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: memo.title,
-          text: `${memo.title}\n\n${memo.content}`,
-          url: window.location.href
-        });
-      } catch (error) {
-        console.error('Error sharing:', error);
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(`${memo.title}\n\n${memo.content}`);
-        alert('内容已复制到剪贴板，你可以手动粘贴到备忘录。');
-      } catch (err) {
-        alert('分享失败');
-      }
+  const handleShareAsImage = async (memo: Memo) => {
+    if (!printRef.current) return;
+    setIsShareSheetOpen(false);
+    
+    try {
+      // Wait for images to load
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(printRef.current, {
+        scale: 1.5,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `[${memo.type}]_${memo.title}_${new Date().toISOString().split('T')[0]}.png`, { type: 'image/png' });
+        
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: memo.title,
+          });
+        } else {
+          // Fallback: Download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = file.name;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+    } catch (error) {
+      console.error('Error generating image:', error);
+      alert('生成图片失败');
     }
+  };
+
+  const handlePrintToPDF = (memo: Memo) => {
+    setIsShareSheetOpen(false);
+    const originalTitle = document.title;
+    const fileName = `[${memo.type}]_${memo.title}_${new Date().toISOString().split('T')[0]}`;
+    
+    document.title = fileName;
+    window.print();
+    
+    // Restore title after a short delay
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
+  };
+
+  const handleShare = async (memo: Memo) => {
+    setIsShareSheetOpen(true);
   };
 
   const handleSaveMemo = async (newMemo: Memo) => {
@@ -625,22 +666,93 @@ export default function App() {
                 <button onClick={() => handleDeleteMemo(selectedMemo.id)} className="ios-button"><Trash2 className="w-5 h-5 text-red-500" /></button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="flex items-center gap-2 mb-4">
+            <div className="flex-1 overflow-y-auto p-6 print-content" ref={printRef}>
+              <div className="flex items-center gap-2 mb-4 no-print">
                 <span className="px-2 py-0.5 bg-[#007AFF]/10 text-[#007AFF] text-[10px] font-bold rounded uppercase tracking-wider">{selectedMemo.type}</span>
                 <span className="text-xs text-gray-400">{new Date(selectedMemo.timestamp).toLocaleString()}</span>
               </div>
+              
+              {/* Print-only header */}
+              <div className="hidden print:block mb-8 border-b border-gray-200 pb-4">
+                <div className="text-[10pt] text-gray-500 mb-1">{selectedMemo.type}</div>
+                <div className="text-[10pt] text-gray-500">{new Date(selectedMemo.timestamp).toLocaleString()}</div>
+              </div>
+
               <h2 className="text-3xl font-bold mb-6">{selectedMemo.title}</h2>
-              {selectedMemo.imageUrl && <img src={selectedMemo.imageUrl} alt="Memo" className="w-full rounded-2xl mb-6 shadow-sm" />}
+              
+              {selectedMemo.imageUrl && (
+                <img 
+                  src={selectedMemo.imageUrl} 
+                  alt="Memo" 
+                  className="w-full rounded-2xl mb-6 shadow-sm" 
+                  crossOrigin="anonymous"
+                />
+              )}
+              
+              {selectedMemo.audioUrl && (
+                <div className="mb-6 no-print">
+                  <audio controls src={selectedMemo.audioUrl} className="w-full" />
+                </div>
+              )}
+
               <div className="prose prose-slate max-w-none"><ReactMarkdown>{selectedMemo.content}</ReactMarkdown></div>
+              
               {selectedMemo.rawText && (
-                <div className="mt-12 pt-6 border-t border-black/5">
+                <div className="mt-12 pt-6 border-t border-black/5 no-print">
                   <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">原始输入</h4>
                   <p className="text-sm text-gray-500 italic">{selectedMemo.rawText}</p>
                 </div>
               )}
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Share Action Sheet */}
+      <AnimatePresence>
+        {isShareSheetOpen && selectedMemo && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsShareSheetOpen(false)}
+              className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm no-print"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 z-[80] bg-[#F2F2F7] rounded-t-3xl p-6 pb-10 no-print"
+            >
+              <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-6" />
+              <h3 className="text-center text-sm font-semibold text-gray-500 mb-6">分享备忘录</h3>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={() => handleShareAsImage(selectedMemo)}
+                  className="w-full bg-white py-4 rounded-2xl font-semibold text-[#007AFF] shadow-sm active:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ImageIcon className="w-5 h-5" />
+                  分享为长图
+                </button>
+                <button
+                  onClick={() => handlePrintToPDF(selectedMemo)}
+                  className="w-full bg-white py-4 rounded-2xl font-semibold text-[#007AFF] shadow-sm active:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Share className="w-5 h-5" />
+                  打印 / 另存为 PDF
+                </button>
+                <button
+                  onClick={() => setIsShareSheetOpen(false)}
+                  className="w-full bg-white py-4 rounded-2xl font-semibold text-gray-900 shadow-sm active:bg-gray-50 transition-colors mt-4"
+                >
+                  取消
+                </button>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
