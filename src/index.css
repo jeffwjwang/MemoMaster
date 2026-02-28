@@ -23,3 +23,53 @@
 .ios-button {
   @apply active:scale-95 transition-transform duration-100;
 }
+
+/* Print Styles */
+@media print {
+  body {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  /* Hide everything by default */
+  #root > div > div:not(.print-content),
+  header,
+  footer,
+  button,
+  .ios-blur,
+  .no-print,
+  .ios-settings-modal {
+    display: none !important;
+  }
+
+  /* Show only the memo content */
+  .print-content {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 20px !important;
+    background: white !important;
+  }
+
+  .print-content * {
+    visibility: visible !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  h2 {
+    font-size: 24pt !important;
+    margin-bottom: 20pt !important;
+  }
+
+  .prose {
+    font-size: 12pt !important;
+    line-height: 1.6 !important;
+  }
+}
