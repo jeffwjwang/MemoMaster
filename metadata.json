@@ -1,0 +1,5 @@
+{
+  "name": "SmartNotes AI",
+  "description": "An iPhone-style memo app that uses AI to organize voice, images, and text into structured notes.",
+  "requestFramePermissions": ["camera", "microphone"]
+}
