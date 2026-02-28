@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#F2F2F7] text-black font-sans antialiased;
+  }
+}
+
+.ios-blur {
+  @apply backdrop-blur-xl bg-white/80 border-b border-black/5;
+}
+
+.ios-card {
+  @apply bg-white rounded-2xl shadow-sm border border-black/5 overflow-hidden;
+}
+
+.ios-button {
+  @apply active:scale-95 transition-transform duration-100;
+}
