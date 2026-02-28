@@ -26,50 +26,86 @@
 
 /* Print Styles */
 @media print {
-  body {
-    background: white !important;
-    padding: 0 !important;
-    margin: 0 !important;
+  /* 1. Reset everything to white background and black text */
+  * {
+    background: transparent !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
-  
-  /* Hide everything by default */
-  #root > div > div:not(.print-content),
-  header,
-  footer,
-  button,
-  .ios-blur,
+
+  html, body {
+    background: white !important;
+    width: 100%;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* 2. Hide all UI elements */
   .no-print,
-  .ios-settings-modal {
+  button,
+  header,
+  .ios-blur,
+  nav,
+  .ios-settings-modal,
+  [role="button"] {
     display: none !important;
   }
 
-  /* Show only the memo content */
-  .print-content {
+  /* 3. Target the specific content container */
+  #root {
     display: block !important;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    padding: 20px !important;
+  }
+
+  /* Hide the main app container if it's not the print content */
+  #root > div > div:not(:has(.print-content)) {
+    display: none !important;
+  }
+
+  /* Ensure the modal container is visible and positioned correctly */
+  .fixed.inset-0 {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
     background: white !important;
   }
 
-  .print-content * {
+  .print-content {
+    display: block !important;
+    width: 100% !important;
+    padding: 20px !important;
+    margin: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  /* Force text visibility in prose */
+  .prose, .prose * {
+    color: black !important;
+    visibility: visible !important;
+  }
+
+  h2, h3, h4, p, li, span {
+    color: black !important;
     visibility: visible !important;
   }
 
   img {
     max-width: 100% !important;
+    display: block !important;
+    margin: 10px 0 !important;
     page-break-inside: avoid;
   }
 
-  h2 {
-    font-size: 24pt !important;
-    margin-bottom: 20pt !important;
-  }
-
-  .prose {
-    font-size: 12pt !important;
-    line-height: 1.6 !important;
+  /* Print-only header should be visible */
+  .print-only-header {
+    display: block !important;
+    margin-bottom: 20px !important;
+    border-bottom: 1px solid #eee !important;
   }
 }
