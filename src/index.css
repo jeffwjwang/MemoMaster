@@ -31,7 +31,7 @@
     size: auto;
   }
 
-  /* 1. Reset everything to white background and black text */
+  /* 1. Global Reset */
   * {
     background: transparent !important;
     color: black !important;
@@ -51,19 +51,21 @@
     display: block !important;
   }
 
-  /* 2. Hide all UI elements */
+  /* 2. Hide everything by default */
   .no-print,
-  button,
+  .no-print *,
   header,
-  .ios-blur,
+  footer,
   nav,
+  button,
+  .ios-blur,
   .ios-settings-modal,
-  [role="button"],
-  .sticky {
+  .sticky,
+  .fixed:not(:has(.print-content)) {
     display: none !important;
   }
 
-  /* 3. Target the specific content container */
+  /* 3. Ensure the root structure doesn't interfere */
   #root, #root > div {
     display: block !important;
     height: auto !important;
@@ -74,32 +76,33 @@
     overflow: visible !important;
   }
 
-  /* Ensure the modal container flows naturally */
-  .fixed.inset-0 {
+  /* 4. Target the specific modal container */
+  /* We want to make sure the modal containing the memo is visible */
+  .fixed.inset-0:has(.print-content) {
     position: static !important;
     display: block !important;
     width: 100% !important;
     height: auto !important;
     background: white !important;
     overflow: visible !important;
+    z-index: auto !important;
   }
 
   .print-content {
     display: block !important;
     width: 100% !important;
-    padding: 0 !important; /* Let @page margin handle it */
+    padding: 0 !important;
     margin: 0 !important;
     background: white !important;
     overflow: visible !important;
     height: auto !important;
-    flex: none !important; /* Disable flex-1 */
   }
 
-  /* Force text visibility in prose */
+  /* 5. Content Styles */
   .prose, .prose * {
     color: black !important;
     visibility: visible !important;
-    max-width: none !important; /* Allow full width */
+    max-width: none !important;
   }
 
   h2, h3, h4, p, li, span {
@@ -115,7 +118,6 @@
     page-break-inside: avoid;
   }
 
-  /* Print-only header should be visible */
   .print-only-header {
     display: block !important;
     margin-bottom: 1cm !important;
@@ -123,7 +125,7 @@
     padding-bottom: 0.5cm !important;
   }
 
-  /* Ensure page breaks work */
+  /* Page break rules */
   .prose p, .prose h2, .prose h3 {
     page-break-inside: avoid;
   }
