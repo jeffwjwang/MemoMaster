@@ -85,12 +85,20 @@ async function compressImage(base64Str: string, maxWidth = 800, quality = 0.7): 
 type MemoType = '灵感记录' | '会议纪要' | '日常随笔' | '任务清单' | '英语拾贝';
 const MEMO_TYPES: MemoType[] = ['灵感记录', '会议纪要', '日常随笔', '任务清单', '英语拾贝'];
 
-type BlockType = 'text' | 'list' | 'highlight' | 'step' | 'bento';
+type BlockType = 'text' | 'list' | 'highlight' | 'step' | 'bento' | 'todo';
+
+interface TodoItem {
+  task: string;
+  time?: string;
+  notes?: string;
+  completed: boolean;
+}
 
 interface ContentBlock {
   type: BlockType;
   title?: string;
   content: string | string[];
+  todoItems?: TodoItem[];
   color?: 'blue' | 'emerald' | 'amber' | 'violet' | 'rose' | 'slate';
 }
 
@@ -126,21 +134,34 @@ async function analyzeMemo(
   const ai = new GoogleGenAI({ apiKey });
   const model = "gemini-3-flash-preview";
   
-  let systemInstruction = `你是一位顶级的视觉化笔记专家。你的任务是将用户的输入整理成极其结构化、视觉化的笔记。
+  const now = new Date();
+  const currentTimeContext = `当前时间是: ${now.toLocaleString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+
+  let systemInstruction = `你是一位顶级的视觉化笔记与任务管理专家。你的任务是将用户的输入整理成极其结构化、视觉化的笔记。
   你必须根据内容逻辑，将笔记拆分为不同的“块(blocks)”。
   
+  ${currentTimeContext}
+  请利用上述当前时间背景，智能解析用户提到的相对时间（如“明天”、“下周一”、“后天晚上”等）。
+
   可用块类型：
-  1. "highlight": 用于核心金句、最重要的结论或定义。
-  2. "step": 用于有先后顺序的步骤、逻辑推导或时间线。
-  3. "bento": 用于并列的多个要点、分类说明，适合网格展示。
-  4. "text": 用于普通的段落描述。
-  5. "list": 用于普通的清单。
+  1. "todo": 专门用于任务清单。必须按类别归类（如：会议、碰面、资料准备、健身、生活、娱乐、饭局等）。
+  2. "highlight": 用于核心金句、最重要的结论或定义。
+  3. "step": 用于有先后顺序的步骤、逻辑推导或时间线。
+  4. "bento": 用于并列的多个要点、分类说明，适合网格展示。
+  5. "text": 用于普通的段落描述。
+
+  任务清单(todo)要求：
+  - 必须包含：任务内容(task)、预计时间(time)、注意要点(notes)。
+  - **时间格式(time)**：必须包含具体的日期、星期几和时间。格式示例：“2026年3月1日 周日 14:00”。如果用户没提到具体时间，请根据语境合理推测或仅显示日期和星期。
+  - 初始状态 completed 必须为 false。
+  - 必须根据任务性质归类到合适的标题下。
 
   颜色分配建议：
-  - 蓝色(blue): 逻辑、冷静、技术
-  - 绿色(emerald): 成功、积极、自然
-  - 黄色(amber): 警告、重点、灵感
-  - 紫色(violet): 创意、深度、总结
+  - 蓝色(blue): 逻辑、技术、会议
+  - 绿色(emerald): 健身、成功、积极
+  - 黄色(amber): 灵感、重点、饭局
+  - 紫色(violet): 创意、深度、娱乐
+  - 红色(rose): 紧急、生活、碰面
   
   请务必使用中文回复，并严格遵守 JSON 格式。`;
 
@@ -150,10 +171,10 @@ async function analyzeMemo(
       systemInstruction += `\n重点：使用 highlight 块展示核心灵感，使用 bento 块展示应用场景。`;
       break;
     case '会议纪要':
-      systemInstruction += `\n重点：使用 step 块展示会议流程，使用 highlight 块展示决议。`;
+      systemInstruction += `\n重点：使用 todo 块展示待办事项，使用 step 块展示会议流程。`;
       break;
     case '任务清单':
-      systemInstruction += `\n重点：使用 step 块拆解任务，使用 bento 块展示 5W1H 要素。`;
+      systemInstruction += `\n重点：将任务严格按类型归类，每类使用一个 todo 块。每个任务项必须包含时间、内容和要点。`;
       break;
     case '英语拾贝':
       systemInstruction += `\n重点：使用 highlight 块展示核心短语，使用 bento 块展示例句和语境。`;
@@ -183,16 +204,29 @@ async function analyzeMemo(
             items: {
               type: Type.OBJECT,
               properties: {
-                type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list"] },
+                type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list", "todo"] },
                 title: { type: Type.STRING },
                 content: { 
                   type: Type.ARRAY, 
                   items: { type: Type.STRING },
-                  description: "如果是 text 或 highlight，数组只包含一个字符串；如果是 list, step 或 bento，数组包含多个项"
+                  description: "如果是 todo 类型，此字段可为空，使用 todoItems"
+                },
+                todoItems: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      task: { type: Type.STRING },
+                      time: { type: Type.STRING },
+                      notes: { type: Type.STRING },
+                      completed: { type: Type.BOOLEAN }
+                    },
+                    required: ["task", "completed"]
+                  }
                 },
                 color: { type: Type.STRING, enum: ["blue", "emerald", "amber", "violet", "rose", "slate"] }
               },
-              required: ["type", "content"]
+              required: ["type"]
             }
           }
         },
@@ -206,7 +240,7 @@ async function analyzeMemo(
 
 // --- Components ---
 
-function StructuredRenderer({ blocks }: { blocks: ContentBlock[] }) {
+function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; onToggleTodo?: (blockIdx: number, itemIdx: number) => void }) {
   return (
     <div className="space-y-6">
       {blocks.map((block, idx) => {
@@ -229,6 +263,45 @@ function StructuredRenderer({ blocks }: { blocks: ContentBlock[] }) {
         }[block.color || 'slate'];
 
         switch (block.type) {
+          case 'todo':
+            return (
+              <div key={idx} className="space-y-3">
+                {block.title && <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <span className={cn("w-1.5 h-3 rounded-full", dotColor)} />
+                  {block.title}
+                </h4>}
+                <div className="space-y-2">
+                  {block.todoItems?.map((item, iIdx) => (
+                    <div 
+                      key={iIdx} 
+                      onClick={() => onToggleTodo?.(idx, iIdx)}
+                      className={cn(
+                        "flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer",
+                        item.completed ? "bg-gray-50 border-gray-100 opacity-60" : "bg-white border-black/5 shadow-sm active:scale-[0.98]"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors",
+                        item.completed ? "bg-[#007AFF] border-[#007AFF]" : "border-gray-300"
+                      )}>
+                        {item.completed && <Plus className="w-3.5 h-3.5 text-white rotate-45" style={{ transform: 'rotate(45deg) scale(1.2)' }} />}
+                        {/* Using a simple checkmark style with Plus icon rotated */}
+                        {item.completed && <div className="w-2.5 h-1.5 border-l-2 border-b-2 border-white -rotate-45 mb-0.5" />}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between items-start gap-2">
+                          <span className={cn("text-sm font-semibold leading-snug", item.completed && "line-through text-gray-400")}>
+                            {item.task}
+                          </span>
+                          {item.time && <span className="text-[10px] font-bold text-[#007AFF] bg-[#007AFF]/5 px-1.5 py-0.5 rounded uppercase">{item.time}</span>}
+                        </div>
+                        {item.notes && <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{item.notes}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
           case 'highlight':
             return (
               <motion.div 
@@ -592,6 +665,27 @@ export default function App() {
     setIsShareSheetOpen(true);
   };
 
+  const handleToggleTodo = async (memoId: string, blockIdx: number, itemIdx: number) => {
+    const memo = memos.find(m => m.id === memoId);
+    if (!memo || !memo.blocks) return;
+
+    const newBlocks = [...memo.blocks];
+    const block = { ...newBlocks[blockIdx] };
+    if (block.todoItems) {
+      const newItems = [...block.todoItems];
+      newItems[itemIdx] = { ...newItems[itemIdx], completed: !newItems[itemIdx].completed };
+      block.todoItems = newItems;
+      newBlocks[blockIdx] = block;
+
+      const updatedMemo = { ...memo, blocks: newBlocks };
+      await saveMemoToDB(updatedMemo);
+      setMemos(memos.map(m => m.id === memoId ? updatedMemo : m));
+      if (selectedMemo?.id === memoId) {
+        setSelectedMemo(updatedMemo);
+      }
+    }
+  };
+
   const handleSaveMemo = async (newMemo: Memo) => {
     await saveMemoToDB(newMemo);
     setMemos([newMemo, ...memos]);
@@ -770,7 +864,10 @@ export default function App() {
               <h2 className="text-3xl font-bold mb-6">{selectedMemo.title}</h2>
               
               {selectedMemo.blocks ? (
-                <StructuredRenderer blocks={selectedMemo.blocks} />
+                <StructuredRenderer 
+                  blocks={selectedMemo.blocks} 
+                  onToggleTodo={(bIdx, iIdx) => handleToggleTodo(selectedMemo.id, bIdx, iIdx)} 
+                />
               ) : (
                 <div className="prose prose-slate max-w-none"><ReactMarkdown>{selectedMemo.content}</ReactMarkdown></div>
               )}
