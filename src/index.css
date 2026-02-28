@@ -24,14 +24,14 @@
   @apply active:scale-95 transition-transform duration-100;
 }
 
-/* Print Styles */
+/* Print Styles (Optimized for window.print) */
 @media print {
   @page {
-    margin: 1.5cm;
+    margin: 1cm;
     size: auto;
   }
 
-  /* 1. Global Reset */
+  /* 1. Global Reset to ensure visibility and flow */
   * {
     background: transparent !important;
     color: black !important;
@@ -44,14 +44,14 @@
   html, body {
     background: white !important;
     width: 100% !important;
-    height: auto !important;
+    height: auto !important; /* CRITICAL: Must be auto for multi-page */
     margin: 0 !important;
     padding: 0 !important;
-    overflow: visible !important;
+    overflow: visible !important; /* CRITICAL: Must be visible */
     display: block !important;
   }
 
-  /* 2. Hide everything by default */
+  /* 2. Hide all non-essential UI */
   .no-print,
   .no-print *,
   header,
@@ -65,8 +65,8 @@
     display: none !important;
   }
 
-  /* 3. Ensure the root structure doesn't interfere */
-  #root, #root > div {
+  /* 3. Force the root and all containers to flow naturally */
+  #root, #root > div, #root > div > div {
     display: block !important;
     height: auto !important;
     width: 100% !important;
@@ -74,10 +74,11 @@
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
+    position: static !important; /* CRITICAL: Remove absolute/fixed positioning */
+    transform: none !important;
   }
 
-  /* 4. Target the specific modal container */
-  /* We want to make sure the modal containing the memo is visible */
+  /* 4. Target the specific modal container that holds the memo */
   .fixed.inset-0:has(.print-content) {
     position: static !important;
     display: block !important;
@@ -86,6 +87,7 @@
     background: white !important;
     overflow: visible !important;
     z-index: auto !important;
+    transform: none !important;
   }
 
   .print-content {
@@ -96,13 +98,15 @@
     background: white !important;
     overflow: visible !important;
     height: auto !important;
+    min-height: 100% !important;
   }
 
-  /* 5. Content Styles */
+  /* 5. Typography and Content visibility */
   .prose, .prose * {
     color: black !important;
     visibility: visible !important;
     max-width: none !important;
+    overflow: visible !important;
   }
 
   h2, h3, h4, p, li, span {
@@ -125,8 +129,8 @@
     padding-bottom: 0.5cm !important;
   }
 
-  /* Page break rules */
-  .prose p, .prose h2, .prose h3 {
+  /* Prevent elements from being cut in half */
+  .prose p, .prose h2, .prose h3, .prose li {
     page-break-inside: avoid;
   }
 }
