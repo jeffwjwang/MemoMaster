@@ -209,7 +209,7 @@ async function analyzeMemo(
                 content: { 
                   type: Type.ARRAY, 
                   items: { type: Type.STRING },
-                  description: "如果是 todo 类型，此字段可为空，使用 todoItems"
+                  description: "内容数组"
                 },
                 todoItems: {
                   type: Type.ARRAY,
@@ -235,15 +235,33 @@ async function analyzeMemo(
     }
   });
 
-  return JSON.parse(response.text);
+  let rawText = response.text;
+  // Strip markdown code blocks if present
+  if (rawText.includes("```json")) {
+    rawText = rawText.split("```json")[1].split("```")[0];
+  } else if (rawText.includes("```")) {
+    rawText = rawText.split("```")[1].split("```")[0];
+  }
+  
+  return JSON.parse(rawText.trim());
 }
 
 // --- Components ---
 
 function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; onToggleTodo?: (blockIdx: number, itemIdx: number) => void }) {
+  if (!blocks || !Array.isArray(blocks)) return null;
+
+  const ensureArray = (content: any): string[] => {
+    if (Array.isArray(content)) return content;
+    if (typeof content === 'string') return [content];
+    return [];
+  };
+
   return (
     <div className="space-y-6">
       {blocks.map((block, idx) => {
+        if (!block) return null;
+        
         const colorClasses = {
           blue: "bg-blue-50 border-blue-100 text-blue-900",
           emerald: "bg-emerald-50 border-emerald-100 text-emerald-900",
@@ -261,6 +279,8 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           rose: "bg-rose-500",
           slate: "bg-slate-500",
         }[block.color || 'slate'];
+
+        const contentArray = ensureArray(block.content);
 
         switch (block.type) {
           case 'todo':
@@ -284,8 +304,6 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
                         "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors",
                         item.completed ? "bg-[#007AFF] border-[#007AFF]" : "border-gray-300"
                       )}>
-                        {item.completed && <Plus className="w-3.5 h-3.5 text-white rotate-45" style={{ transform: 'rotate(45deg) scale(1.2)' }} />}
-                        {/* Using a simple checkmark style with Plus icon rotated */}
                         {item.completed && <div className="w-2.5 h-1.5 border-l-2 border-b-2 border-white -rotate-45 mb-0.5" />}
                       </div>
                       <div className="flex-1">
@@ -311,14 +329,14 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
                 className={cn("p-6 rounded-3xl border shadow-sm", colorClasses)}
               >
                 {block.title && <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2 opacity-60">{block.title}</h4>}
-                <p className="text-xl font-bold leading-relaxed">{block.content[0]}</p>
+                <p className="text-xl font-bold leading-relaxed">{contentArray[0]}</p>
               </motion.div>
             );
           case 'step':
             return (
               <div key={idx} className="space-y-4 relative pl-8 py-2">
                 <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-gray-200" />
-                {(block.content as string[]).map((step, sIdx) => (
+                {contentArray.map((step, sIdx) => (
                   <div key={sIdx} className="relative">
                     <div className={cn("absolute -left-[25px] top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm", dotColor)} />
                     <p className="text-sm font-medium text-gray-700 leading-relaxed">{step}</p>
@@ -329,7 +347,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           case 'bento':
             return (
               <div key={idx} className="grid grid-cols-2 gap-3">
-                {(block.content as string[]).map((item, bIdx) => (
+                {contentArray.map((item, bIdx) => (
                   <div key={bIdx} className={cn("p-4 rounded-2xl border flex flex-col justify-center min-h-[80px]", colorClasses)}>
                     <p className="text-xs font-bold leading-snug">{item}</p>
                   </div>
@@ -339,7 +357,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           case 'list':
             return (
               <ul key={idx} className="space-y-3">
-                {(block.content as string[]).map((item, lIdx) => (
+                {contentArray.map((item, lIdx) => (
                   <li key={lIdx} className="flex items-start gap-3 text-sm text-gray-600">
                     <span className={cn("mt-1.5 w-1.5 h-1.5 rounded-full shrink-0", dotColor)} />
                     <span className="leading-relaxed">{item}</span>
@@ -348,7 +366,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
               </ul>
             );
           default:
-            return <p key={idx} className="text-sm text-gray-600 leading-relaxed">{block.content[0]}</p>;
+            return <p key={idx} className="text-sm text-gray-600 leading-relaxed">{contentArray[0]}</p>;
         }
       })}
     </div>
@@ -376,8 +394,18 @@ function MemoCard({ memo, onClick }: { memo: Memo; onClick: () => void }) {
       </div>
       <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">{memo.title}</h3>
       <div className="text-sm text-gray-600 line-clamp-3 mb-3 prose prose-sm">
-        {memo.blocks ? (
-          <p>{memo.blocks.find(b => b.type === 'text' || b.type === 'highlight')?.content[0] || memo.content}</p>
+        {memo.blocks && Array.isArray(memo.blocks) ? (
+          <p>
+            {(() => {
+              const firstTextBlock = memo.blocks.find(b => b.type === 'text' || b.type === 'highlight');
+              if (firstTextBlock) {
+                const content = firstTextBlock.content;
+                if (Array.isArray(content)) return content[0];
+                if (typeof content === 'string') return content;
+              }
+              return memo.content;
+            })()}
+          </p>
         ) : (
           <ReactMarkdown>{memo.content}</ReactMarkdown>
         )}
