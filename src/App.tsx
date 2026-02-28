@@ -640,6 +640,173 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
 
 // --- Main App ---
 
+function ChatDialog({ memos, onClose }: { memos: Memo[]; onClose: () => void }) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([
+    { role: 'ai', text: '你好！我是你的 Gemini 笔记助手。你可以问我关于备忘录的任何问题，比如“帮我总结一下最近的会议”或“我上周收藏了哪些关于 AI 的文章？”' }
+  ]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setIsLoading(true);
+
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) throw new Error("API_KEY_MISSING");
+
+      const ai = new GoogleGenAI({ apiKey });
+      const model = "gemini-3-flash-preview";
+
+      // --- RAG Logic: Filter relevant memos ---
+      const keywords = userMsg.toLowerCase().split(/[\s,，。！!？?]+/).filter(k => k.length >= 1);
+      
+      const scoredMemos = memos.map(m => {
+        let score = 0;
+        const searchText = (m.title + " " + (m.rawText || m.content) + " " + m.type).toLowerCase();
+        
+        // Keyword matching score
+        keywords.forEach(kw => {
+          if (searchText.includes(kw)) score += 10;
+          if (m.title.toLowerCase().includes(kw)) score += 5;
+        });
+        
+        // Recency boost (memos from last 24h get a boost)
+        const hoursOld = (Date.now() - m.timestamp) / (1000 * 60 * 60);
+        if (hoursOld < 24) score += 5;
+        if (hoursOld < 1) score += 5; // Very recent
+
+        return { m, score, timestamp: m.timestamp };
+      });
+
+      // Pick top 10 by score + top 5 by recency (to ensure context of what user just did)
+      const topByScore = [...scoredMemos].sort((a, b) => b.score - a.score).slice(0, 10);
+      const topByRecency = [...scoredMemos].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+      
+      // Merge and deduplicate
+      const relevantMemos = Array.from(new Set([...topByScore, ...topByRecency].map(item => item.m)));
+
+      // Prepare pruned context
+      const memosContext = relevantMemos.map(m => {
+        let content = m.rawText || m.content;
+        if (m.blocks) {
+          content += "\n结构化内容: " + m.blocks.map(b => {
+            const blockContent = Array.isArray(b.content) ? b.content.join(', ') : b.content;
+            return `[${b.type}] ${b.title || ''}: ${blockContent}`;
+          }).join('; ');
+        }
+        return `ID: ${m.id}\n类型: ${m.type}\n标题: ${m.title}\n日期: ${new Date(m.timestamp).toLocaleString()}\n内容: ${content}`;
+      }).join('\n---\n');
+
+      const systemInstruction = `你是一个智能笔记助手。你拥有用户备忘录库的检索权限。
+      当前时间: ${new Date().toLocaleString()}
+      
+      【检索到的相关备忘录数据】(已根据相关性和时间为你筛选):
+      ${memosContext}
+      
+      你的任务：
+      1. 回答用户关于备忘录的问题。
+      2. 帮用户寻找特定的信息或备忘录。
+      3. 进行跨备忘录的深度分析、总结或对比。
+      
+      回复要求：
+      - 语气友好、专业、简洁。
+      - 如果检索到的信息中没有相关内容，请诚实告知，并建议用户尝试提供更多关键词。
+      - 使用 Markdown 格式美化你的回复。
+      - 如果提到了具体的备忘录，请指明其标题。`;
+
+      const response = await ai.models.generateContent({
+        model,
+        contents: [
+          ...messages.map(m => ({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts: [{ text: m.text }]
+          })),
+          { role: 'user', parts: [{ text: userMsg }] }
+        ],
+        config: {
+          systemInstruction,
+        }
+      });
+
+      setMessages(prev => [...prev, { role: 'ai', text: response.text || '抱歉，我没能理解你的意思。' }]);
+    } catch (error: any) {
+      setMessages(prev => [...prev, { role: 'ai', text: error.message === 'API_KEY_MISSING' ? '请先在设置中配置 API Key。' : '发生了一些错误，请稍后再试。' }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      className="fixed inset-0 z-[100] bg-[#F2F2F7] flex flex-col"
+    >
+      <div className="ios-blur sticky top-0 px-4 py-3 flex items-center justify-between">
+        <button onClick={onClose} className="text-[#007AFF] text-lg font-medium ios-button">关闭</button>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-[#007AFF] animate-pulse" />
+          问问 Gemini
+        </h2>
+        <div className="w-12" /> {/* Spacer */}
+      </div>
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((msg, idx) => (
+          <div key={idx} className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
+            <div className={cn(
+              "max-w-[85%] p-4 rounded-2xl shadow-sm",
+              msg.role === 'user' ? "bg-[#007AFF] text-white rounded-tr-none" : "bg-white text-gray-800 rounded-tl-none border border-black/5"
+            )}>
+              <div className="prose prose-sm prose-slate max-w-none dark:prose-invert">
+                <ReactMarkdown>{msg.text}</ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        ))}
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-black/5 shadow-sm">
+              <Loader2 className="w-5 h-5 animate-spin text-[#007AFF]" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 bg-white border-t border-black/5 pb-10">
+        <div className="flex gap-2 bg-black/5 p-2 rounded-2xl">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="问问你的笔记..."
+            className="flex-1 bg-transparent px-3 py-2 focus:outline-none text-sm"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || isLoading}
+            className="w-10 h-10 bg-[#007AFF] text-white rounded-xl flex items-center justify-center disabled:opacity-30 ios-button"
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function App() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [isCreating, setIsCreating] = useState(false);
@@ -647,6 +814,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<MemoType | '全部'>('全部');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
@@ -861,8 +1029,15 @@ export default function App() {
             </div>
           )}
         </main>
-        <div className="ios-blur sticky bottom-0 px-6 py-4 flex justify-center items-center no-print border-t border-black/5">
+        <div className="ios-blur sticky bottom-0 px-6 py-4 flex justify-between items-center no-print border-t border-black/5">
           <p className="text-xs text-gray-400 font-medium">{memos.length} 条备忘录</p>
+          <button 
+            onClick={() => setIsChatOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-black/5 rounded-full shadow-sm text-[#007AFF] text-xs font-bold ios-button"
+          >
+            <div className="w-2 h-2 rounded-full bg-[#007AFF] animate-pulse" />
+            问问 Gemini
+          </button>
         </div>
       </div>
 
@@ -1036,6 +1211,10 @@ export default function App() {
             </motion.div>
           </>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isChatOpen && <ChatDialog memos={memos} onClose={() => setIsChatOpen(false)} />}
       </AnimatePresence>
 
       <AnimatePresence>
