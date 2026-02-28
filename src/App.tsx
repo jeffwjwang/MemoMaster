@@ -491,12 +491,12 @@ export default function App() {
     const fileName = `[${memo.type}]_${memo.title}_${new Date().toISOString().split('T')[0]}`;
     
     document.title = fileName;
-    window.print();
     
-    // Restore title after a short delay
+    // Small delay to ensure UI is ready
     setTimeout(() => {
+      window.print();
       document.title = originalTitle;
-    }, 1000);
+    }, 100);
   };
 
   const handleShare = async (memo: Memo) => {
