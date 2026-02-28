@@ -800,9 +800,12 @@ export default function App() {
         <header className="ios-blur sticky top-0 z-30 px-6 pt-12 pb-4">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold tracking-tight">备忘录</h1>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white rounded-full shadow-sm border border-black/5 ios-button">
                 <Settings className="w-5 h-5 text-[#007AFF]" />
+              </button>
+              <button onClick={() => setIsCreating(true)} className="p-2 bg-[#007AFF] rounded-full shadow-md shadow-[#007AFF]/20 ios-button">
+                <Plus className="w-5 h-5 text-white" />
               </button>
             </div>
           </div>
@@ -815,7 +818,7 @@ export default function App() {
             />
           </div>
         </header>
-        <main className="flex-1 px-4 py-6">
+        <main className="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar">
           {filteredMemos.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm border border-black/5"><Plus className="w-8 h-8" /></div>
@@ -830,11 +833,8 @@ export default function App() {
             </div>
           )}
         </main>
-        <div className="ios-blur sticky bottom-0 px-6 py-4 flex justify-between items-center no-print">
-          <p className="text-xs text-gray-500 font-medium">{memos.length} 条备忘录</p>
-          <button onClick={() => setIsCreating(true)} className="w-12 h-12 bg-[#007AFF] text-white rounded-full flex items-center justify-center shadow-lg shadow-[#007AFF]/30 ios-button">
-            <Plus className="w-6 h-6" />
-          </button>
+        <div className="ios-blur sticky bottom-0 px-6 py-4 flex justify-center items-center no-print border-t border-black/5">
+          <p className="text-xs text-gray-400 font-medium">{memos.length} 条备忘录</p>
         </div>
       </div>
 
