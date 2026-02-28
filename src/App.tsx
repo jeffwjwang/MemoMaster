@@ -673,7 +673,7 @@ export default function App() {
               </div>
               
               {/* Print-only header */}
-              <div className="hidden print:block mb-8 border-b border-gray-200 pb-4">
+              <div className="hidden print:block print-only-header mb-8 border-b border-gray-200 pb-4">
                 <div className="text-[10pt] text-gray-500 mb-1">{selectedMemo.type}</div>
                 <div className="text-[10pt] text-gray-500">{new Date(selectedMemo.timestamp).toLocaleString()}</div>
               </div>
