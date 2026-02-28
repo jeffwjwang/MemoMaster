@@ -6,9 +6,79 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+// --- IndexedDB Wrapper ---
+const DB_NAME = 'SmartMemosDB';
+const STORE_NAME = 'memos';
+
+async function initDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getAllMemos(): Promise<Memo[]> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveMemoToDB(memo: Memo) {
+  const db = await initDB();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  transaction.objectStore(STORE_NAME).put(memo);
+}
+
+async function deleteMemoFromDB(id: string) {
+  const db = await initDB();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  transaction.objectStore(STORE_NAME).delete(id);
+}
+
+async function clearAllMemos() {
+  const db = await initDB();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  transaction.objectStore(STORE_NAME).clear();
+}
+
 // --- Utilities ---
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+async function compressImage(base64Str: string, maxWidth = 800, quality = 0.7): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = (maxWidth / width) * height;
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+  });
 }
 
 // --- Types ---
@@ -182,7 +252,10 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => setImage(reader.result as string);
+      reader.onloadend = async () => {
+        const compressed = await compressImage(reader.result as string);
+        setImage(compressed);
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -356,24 +429,17 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
 // --- Main App ---
 
 export default function App() {
-  const [memos, setMemos] = useState<Memo[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('smart_memos');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
+  const [memos, setMemos] = useState<Memo[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedMemo, setSelectedMemo] = useState<Memo | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
+  // Load from IndexedDB on mount
   useEffect(() => {
-    if (memos.length > 0 || localStorage.getItem('smart_memos')) {
-      localStorage.setItem('smart_memos', JSON.stringify(memos));
-    }
-  }, [memos]);
+    getAllMemos().then(setMemos).catch(console.error);
+  }, []);
 
   const handleShare = async (memo: Memo) => {
     if (navigator.share) {
@@ -396,13 +462,51 @@ export default function App() {
     }
   };
 
-  const handleSaveMemo = (newMemo: Memo) => {
+  const handleSaveMemo = async (newMemo: Memo) => {
+    await saveMemoToDB(newMemo);
     setMemos([newMemo, ...memos]);
   };
 
-  const handleDeleteMemo = (id: string) => {
+  const handleDeleteMemo = async (id: string) => {
+    await deleteMemoFromDB(id);
     setMemos(memos.filter(m => m.id !== id));
     setSelectedMemo(null);
+  };
+
+  const handleExportData = () => {
+    const data = JSON.stringify(memos, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `memos_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const importedMemos = JSON.parse(event.target?.result as string);
+        if (Array.isArray(importedMemos)) {
+          if (confirm(`确定要导入 ${importedMemos.length} 条备忘录吗？这可能会覆盖现有数据。`)) {
+            for (const m of importedMemos) {
+              await saveMemoToDB(m);
+            }
+            const all = await getAllMemos();
+            setMemos(all);
+            alert('导入成功');
+          }
+        }
+      } catch (err) {
+        alert('导入失败，请检查文件格式');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const filteredMemos = memos.filter(m => 
@@ -482,6 +586,25 @@ export default function App() {
                   <p className="mt-2 text-[10px] text-gray-400">该 Key 将仅保存在你的浏览器本地，用于在 GitHub Pages 等静态环境中使用。</p>
                 </div>
                 <button onClick={handleSaveApiKey} className="w-full bg-[#007AFF] text-white py-3 rounded-xl font-bold shadow-lg shadow-[#007AFF]/20 active:scale-95 transition-transform">保存设置</button>
+                
+                <div className="pt-4 border-t border-gray-100 space-y-3">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">数据备份 (iCloud/本地)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={handleExportData}
+                      className="bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium ios-button"
+                    >
+                      导出备份
+                    </button>
+                    <label className="bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium ios-button text-center cursor-pointer">
+                      导入备份
+                      <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    你可以将导出的文件保存到 iPhone 的“文件” App 中（即 iCloud 云盘），实现跨设备备份。
+                  </p>
+                </div>
               </div>
             </motion.div>
           </motion.div>
