@@ -82,10 +82,10 @@ async function compressImage(base64Str: string, maxWidth = 800, quality = 0.7): 
 }
 
 // --- Types ---
-type MemoType = '灵感记录' | '会议纪要' | '日常随笔' | '任务清单' | '英语拾贝';
-const MEMO_TYPES: MemoType[] = ['灵感记录', '会议纪要', '日常随笔', '任务清单', '英语拾贝'];
+type MemoType = '灵感记录' | '会议纪要' | '日常随笔' | '任务清单' | '英语拾贝' | '好文收藏';
+const MEMO_TYPES: MemoType[] = ['灵感记录', '会议纪要', '日常随笔', '任务清单', '英语拾贝', '好文收藏'];
 
-type BlockType = 'text' | 'list' | 'highlight' | 'step' | 'bento' | 'todo';
+type BlockType = 'text' | 'list' | 'highlight' | 'step' | 'bento' | 'todo' | 'quote';
 
 interface TodoItem {
   task: string;
@@ -179,6 +179,13 @@ async function analyzeMemo(
     case '英语拾贝':
       systemInstruction += `\n重点：使用 highlight 块展示核心短语，使用 bento 块展示例句和语境。`;
       break;
+    case '好文收藏':
+      systemInstruction += `\n重点：
+      - 如果是文字内容：使用 highlight 块提取金句，使用 quote 块摘录精彩片段。
+      - 如果是图片内容（漫画、照片、插画）：分析其视觉隐喻、情感内核或艺术风格，使用 highlight 块总结其“一眼万年”的精髓。
+      - 如果是专业图表（流程图、数据图表、论文插画）：解析其逻辑结构或核心趋势。使用 step 块还原流程逻辑，使用 bento 块列出关键数据点或发现。
+      - 综合分析：使用 bento 块分析用户收藏此内容的深层意图（如：审美积累、逻辑参考、数据佐证等）。`;
+      break;
   }
 
   const parts: any[] = [{ text: systemInstruction }];
@@ -204,7 +211,7 @@ async function analyzeMemo(
             items: {
               type: Type.OBJECT,
               properties: {
-                type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list", "todo"] },
+                type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list", "todo", "quote"] },
                 title: { type: Type.STRING },
                 content: { 
                   type: Type.ARRAY, 
@@ -331,6 +338,14 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
                 {block.title && <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2 opacity-60">{block.title}</h4>}
                 <p className="text-xl font-bold leading-relaxed">{contentArray[0]}</p>
               </motion.div>
+            );
+          case 'quote':
+            return (
+              <div key={idx} className="relative p-6 bg-gray-50 rounded-3xl border-l-4 border-[#007AFF] italic text-gray-700">
+                <div className="absolute -top-3 -left-1 text-4xl text-[#007AFF] opacity-20 font-serif">“</div>
+                <p className="text-base leading-relaxed">{contentArray[0]}</p>
+                <div className="absolute -bottom-6 -right-2 text-4xl text-[#007AFF] opacity-20 font-serif">”</div>
+              </div>
             );
           case 'step':
             return (
@@ -891,6 +906,13 @@ export default function App() {
 
               <h2 className="text-3xl font-bold mb-6">{selectedMemo.title}</h2>
               
+              {selectedMemo.rawText && selectedMemo.type === '好文收藏' && (
+                <div className="mb-8 p-4 bg-black/5 rounded-2xl border border-black/5">
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">原文内容</h4>
+                  <p className="text-sm text-gray-600 line-clamp-[10] overflow-y-auto max-h-48">{selectedMemo.rawText}</p>
+                </div>
+              )}
+
               {selectedMemo.blocks ? (
                 <StructuredRenderer 
                   blocks={selectedMemo.blocks} 
@@ -915,7 +937,7 @@ export default function App() {
                 </div>
               )}
 
-              {selectedMemo.rawText && (
+              {selectedMemo.rawText && selectedMemo.type !== '好文收藏' && (
                 <div className="mt-12 pt-6 border-t border-black/5 no-print">
                   <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">原始输入</h4>
                   <p className="text-sm text-gray-500 italic">{selectedMemo.rawText}</p>
