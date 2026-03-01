@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, Check, Sparkles, Quote } from 'lucide-react';
+import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, Check, Sparkles, Quote, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -273,7 +273,17 @@ async function analyzeMemo(
       systemInstruction += `\n重点：使用 highlight 块展示核心灵感，使用 bento 块展示应用场景。`;
       break;
     case '会议纪要':
-      systemInstruction += `\n重点：使用 todo 块展示待办事项，使用 step 块展示会议流程。`;
+      systemInstruction += `\n**【会议纪要专项指令：深度捕获与全量还原】**
+      1. **严禁过度浓缩**：会议纪要必须保持极高的信息密度。严禁跳过讨论细节、背景或多方观点。
+      2. **全量信息分配**：你必须将会议的每一个议程、每一项决策、每一段关键讨论都分配到对应的块中。
+      3. **深度结构化要求**：
+         - 会议背景/议程 -> 使用 "text" 块。
+         - 讨论流/逻辑演进 -> 使用 "step" 块（必须详尽，还原讨论过程）。
+         - 核心结论/决策 -> 使用 "highlight" 块。
+         - 多方观点/并列议题 -> 使用 "bento" 块（适合展示不同部门或人员的反馈）。
+         - 任务/待办 -> 必须使用 "todo" 块，且每个任务必须包含时间、责任人和具体要求。
+      4. **视觉厚度**：强制要求生成至少 8-12 个 blocks，以确保内容的完整性。
+      5. **目标**：让未参会的人通过这份笔记也能完全还原会议的实况、逻辑和所有产出。`;
       break;
     case '任务清单':
       systemInstruction += `\n重点：将任务严格按类型归类，每类使用一个 todo 块。每个任务项必须包含时间、内容和要点。`;
@@ -1028,6 +1038,9 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editMemo, setEditMemo] = useState<Memo | null>(null);
 
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -1901,6 +1914,20 @@ export default function App() {
     setSelectedMemo(null);
   };
 
+  const handleSaveEdit = async () => {
+    if (!editMemo) return;
+    await saveMemoToDB(editMemo);
+    setMemos(memos.map(m => m.id === editMemo.id ? editMemo : m));
+    setSelectedMemo(editMemo);
+    setIsEditing(false);
+    setEditMemo(null);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditMemo(null);
+  };
+
   const handleExportData = () => {
     const data = JSON.stringify(memos, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
@@ -2083,8 +2110,31 @@ export default function App() {
             <div className="ios-blur sticky top-0 px-4 py-3 flex items-center justify-between">
               <button onClick={() => setSelectedMemo(null)} className="flex items-center text-[#007AFF] text-lg font-medium ios-button"><ChevronLeft className="w-6 h-6" />返回</button>
               <div className="flex gap-4">
-                <button 
-                  onClick={async () => {
+                {isEditing ? (
+                  <>
+                    <button onClick={handleSaveEdit} className="flex items-center gap-1 px-3 py-1.5 bg-[#007AFF] text-white rounded-full text-xs font-bold ios-button">
+                      <Check className="w-4 h-4" />
+                      保存
+                    </button>
+                    <button onClick={handleCancelEdit} className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs font-bold ios-button">
+                      <X className="w-4 h-4" />
+                      取消
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => {
+                        setEditMemo(selectedMemo);
+                        setIsEditing(true);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-white border border-black/5 text-gray-500 rounded-full text-xs font-bold ios-button"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      编辑文字
+                    </button>
+                    <button 
+                      onClick={async () => {
                     if (!selectedMemo || isReAnalyzing) return;
                     setIsReAnalyzing(true);
                     setReAnalysisProgress('准备重新分析...');
@@ -2134,11 +2184,112 @@ export default function App() {
                 </button>
                 <button onClick={() => handleShare(selectedMemo)} className="ios-button"><Share className="w-5 h-5 text-[#007AFF]" /></button>
                 <button onClick={() => handleDeleteMemo(selectedMemo.id)} className="ios-button"><Trash2 className="w-5 h-5 text-red-500" /></button>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-8 print-content bg-[#FDFDFB]" ref={printRef}>
               <div className="max-w-2xl mx-auto">
-                <div className="flex items-center justify-between mb-10 no-print">
+                {isEditing && editMemo ? (
+                  <div className="space-y-10 pb-20">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">标题</label>
+                      <input 
+                        value={editMemo.title}
+                        onChange={(e) => setEditMemo({ ...editMemo, title: e.target.value })}
+                        className="w-full text-3xl font-serif font-bold bg-transparent border-b border-black/5 focus:border-[#007AFF] focus:outline-none pb-2"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">AI 核心总结</label>
+                      <textarea 
+                        value={editMemo.content}
+                        onChange={(e) => setEditMemo({ ...editMemo, content: e.target.value })}
+                        className="w-full text-lg font-serif italic bg-white p-6 rounded-2xl border border-black/5 focus:border-[#007AFF] focus:outline-none min-h-[120px] resize-none"
+                      />
+                    </div>
+
+                    <div className="space-y-8">
+                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em] border-b border-black/5 pb-2">结构化内容编辑</h4>
+                      {editMemo.blocks?.map((block, bIdx) => (
+                        <div key={bIdx} className="p-6 bg-white rounded-3xl border border-black/5 space-y-4 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[9px] font-bold rounded uppercase tracking-wider">{block.type}</span>
+                            <input 
+                              value={block.title || ''}
+                              onChange={(e) => {
+                                const newBlocks = [...editMemo.blocks!];
+                                newBlocks[bIdx] = { ...block, title: e.target.value };
+                                setEditMemo({ ...editMemo, blocks: newBlocks });
+                              }}
+                              placeholder="块标题"
+                              className="bg-transparent text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right focus:outline-none border-b border-transparent focus:border-[#007AFF]"
+                            />
+                          </div>
+                          
+                          {block.type === 'todo' ? (
+                            <div className="space-y-3">
+                              {block.todoItems?.map((item, iIdx) => (
+                                <div key={iIdx} className="space-y-2 p-3 bg-gray-50 rounded-xl border border-black/5">
+                                  <input 
+                                    value={item.task}
+                                    onChange={(e) => {
+                                      const newBlocks = [...editMemo.blocks!];
+                                      const newItems = [...block.todoItems!];
+                                      newItems[iIdx] = { ...item, task: e.target.value };
+                                      newBlocks[bIdx] = { ...block, todoItems: newItems };
+                                      setEditMemo({ ...editMemo, blocks: newBlocks });
+                                    }}
+                                    className="w-full text-sm font-medium bg-transparent focus:outline-none"
+                                  />
+                                  <div className="flex gap-2">
+                                    <input 
+                                      value={item.time || ''}
+                                      onChange={(e) => {
+                                        const newBlocks = [...editMemo.blocks!];
+                                        const newItems = [...block.todoItems!];
+                                        newItems[iIdx] = { ...item, time: e.target.value };
+                                        newBlocks[bIdx] = { ...block, todoItems: newItems };
+                                        setEditMemo({ ...editMemo, blocks: newBlocks });
+                                      }}
+                                      placeholder="时间"
+                                      className="text-[9px] font-bold text-gray-400 bg-white px-2 py-1 rounded border border-black/5 focus:outline-none"
+                                    />
+                                    <input 
+                                      value={item.notes || ''}
+                                      onChange={(e) => {
+                                        const newBlocks = [...editMemo.blocks!];
+                                        const newItems = [...block.todoItems!];
+                                        newItems[iIdx] = { ...item, notes: e.target.value };
+                                        newBlocks[bIdx] = { ...block, todoItems: newItems };
+                                        setEditMemo({ ...editMemo, blocks: newBlocks });
+                                      }}
+                                      placeholder="备注"
+                                      className="flex-1 text-[10px] text-gray-500 bg-white px-2 py-1 rounded border border-black/5 focus:outline-none"
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <textarea 
+                              value={Array.isArray(block.content) ? block.content.join('\n') : block.content}
+                              onChange={(e) => {
+                                const newBlocks = [...editMemo.blocks!];
+                                newBlocks[bIdx] = { ...block, content: e.target.value.split('\n') };
+                                setEditMemo({ ...editMemo, blocks: newBlocks });
+                              }}
+                              className="w-full text-sm text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-2xl border border-black/5 focus:border-[#007AFF] focus:outline-none min-h-[100px] resize-none"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-10 no-print">
                   <div className="flex items-center gap-3">
                     <span className="px-3 py-1 bg-[#1A1A1A] text-white text-[9px] font-bold rounded-full uppercase tracking-[0.2em]">{selectedMemo.type}</span>
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{new Date(selectedMemo.timestamp).toLocaleDateString('zh-CN')}</span>
@@ -2206,6 +2357,11 @@ export default function App() {
                     </div>
                     <p className="text-sm text-gray-400 italic leading-relaxed font-medium">{selectedMemo.rawText}</p>
                   </div>
+                )}
+              </>
+            )}
+            {!isEditing && (
+                  <div className="h-20" />
                 )}
               </div>
             </div>
