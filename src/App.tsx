@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight } from 'lucide-react';
+import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, Check, Sparkles, Quote } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -378,26 +378,26 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {blocks.map((block, idx) => {
         if (!block) return null;
         
         const colorClasses = {
-          blue: "bg-blue-50 border-blue-100 text-blue-900",
-          emerald: "bg-emerald-50 border-emerald-100 text-emerald-900",
-          amber: "bg-amber-50 border-amber-100 text-amber-900",
-          violet: "bg-violet-50 border-violet-100 text-violet-900",
-          rose: "bg-rose-50 border-rose-100 text-rose-900",
-          slate: "bg-slate-50 border-slate-100 text-slate-900",
+          blue: "bg-[#F0F7FF] border-[#E0EFFF] text-[#0056B3]",
+          emerald: "bg-[#F0FDF4] border-[#DCFCE7] text-[#166534]",
+          amber: "bg-[#FFFBEB] border-[#FEF3C7] text-[#92400E]",
+          violet: "bg-[#F5F3FF] border-[#EDE9FE] text-[#5B21B6]",
+          rose: "bg-[#FFF1F2] border-[#FFE4E6] text-[#9F1239]",
+          slate: "bg-[#F8FAFC] border-[#F1F5F9] text-[#334155]",
         }[block.color || 'slate'];
 
-        const dotColor = {
-          blue: "bg-blue-500",
-          emerald: "bg-emerald-500",
-          amber: "bg-amber-500",
-          violet: "bg-violet-500",
-          rose: "bg-rose-500",
-          slate: "bg-slate-500",
+        const accentColor = {
+          blue: "#007AFF",
+          emerald: "#10B981",
+          amber: "#F59E0B",
+          violet: "#8B5CF6",
+          rose: "#F43F5E",
+          slate: "#64748B",
         }[block.color || 'slate'];
 
         const contentArray = ensureArray(block.content);
@@ -405,35 +405,41 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
         switch (block.type) {
           case 'todo':
             return (
-              <div key={idx} className="space-y-3">
-                {block.title && <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <span className={cn("w-1.5 h-3 rounded-full", dotColor)} />
-                  {block.title}
-                </h4>}
-                <div className="space-y-2">
+              <div key={idx} className="space-y-4">
+                {block.title && (
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-[1px] flex-1 bg-black/5" />
+                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] whitespace-nowrap">
+                      {block.title}
+                    </h4>
+                    <div className="h-[1px] flex-1 bg-black/5" />
+                  </div>
+                )}
+                <div className="space-y-2 relative pl-4">
+                  <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-black/5" />
                   {block.todoItems?.map((item, iIdx) => (
                     <div 
                       key={iIdx} 
                       onClick={() => onToggleTodo?.(idx, iIdx)}
                       className={cn(
-                        "flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer",
-                        item.completed ? "bg-gray-50 border-gray-100 opacity-60" : "bg-white border-black/5 shadow-sm active:scale-[0.98]"
+                        "flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer group",
+                        item.completed ? "bg-transparent border-transparent opacity-40" : "bg-white border-black/5 shadow-sm hover:shadow-md active:scale-[0.99]"
                       )}
                     >
                       <div className={cn(
-                        "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors",
-                        item.completed ? "bg-[#007AFF] border-[#007AFF]" : "border-gray-300"
+                        "w-5 h-5 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-all",
+                        item.completed ? "bg-[#1A1A1A] border-[#1A1A1A]" : "border-gray-200 group-hover:border-gray-400"
                       )}>
-                        {item.completed && <div className="w-2.5 h-1.5 border-l-2 border-b-2 border-white -rotate-45 mb-0.5" />}
+                        {item.completed && <Check className="w-3 h-3 text-white" />}
                       </div>
                       <div className="flex-1">
                         <div className="flex justify-between items-start gap-2">
-                          <span className={cn("text-sm font-semibold leading-snug", item.completed && "line-through text-gray-400")}>
+                          <span className={cn("text-sm font-medium leading-snug", item.completed && "line-through text-gray-400")}>
                             {item.task}
                           </span>
-                          {item.time && <span className="text-[10px] font-bold text-[#007AFF] bg-[#007AFF]/5 px-1.5 py-0.5 rounded uppercase">{item.time}</span>}
+                          {item.time && <span className="text-[9px] font-bold text-gray-400 border border-black/5 px-1.5 py-0.5 rounded uppercase tracking-wider">{item.time}</span>}
                         </div>
-                        {item.notes && <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{item.notes}</p>}
+                        {item.notes && <p className="text-[11px] text-gray-500 mt-1 leading-relaxed italic">{item.notes}</p>}
                       </div>
                     </div>
                   ))}
@@ -444,57 +450,72 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
             return (
               <motion.div 
                 key={idx}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className={cn("p-6 rounded-3xl border shadow-sm", colorClasses)}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn("p-8 rounded-3xl border border-dashed relative overflow-hidden", colorClasses)}
               >
-                {block.title && <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2 opacity-60">{block.title}</h4>}
-                <p className="text-xl font-bold leading-relaxed">{contentArray[0]}</p>
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <Sparkles className="w-12 h-12" />
+                </div>
+                {block.title && <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] mb-3 opacity-50">{block.title}</h4>}
+                <p className="text-xl font-serif font-medium leading-relaxed italic">{contentArray[0]}</p>
               </motion.div>
             );
           case 'quote':
             return (
-              <div key={idx} className="relative p-6 bg-gray-50 rounded-3xl border-l-4 border-[#007AFF] italic text-gray-700">
-                <div className="absolute -top-3 -left-1 text-4xl text-[#007AFF] opacity-20 font-serif">“</div>
-                <p className="text-base leading-relaxed">{contentArray[0]}</p>
-                <div className="absolute -bottom-6 -right-2 text-4xl text-[#007AFF] opacity-20 font-serif">”</div>
+              <div key={idx} className="relative py-4 px-8 border-l-[1px] border-black/20">
+                <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-black/5" />
+                <Quote className="absolute -left-3 top-0 w-6 h-6 text-black/5" />
+                <p className="text-lg font-serif italic text-gray-700 leading-relaxed">
+                  {contentArray[0]}
+                </p>
+                {block.title && <p className="mt-3 text-xs font-bold text-gray-400 uppercase tracking-widest">— {block.title}</p>}
               </div>
             );
           case 'step':
             return (
-              <div key={idx} className="space-y-4 relative pl-8 py-2">
-                <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-gray-200" />
+              <div key={idx} className="space-y-6 relative pl-8 py-2">
+                <div className="absolute left-[11px] top-4 bottom-4 w-[1px] bg-black/5" />
                 {contentArray.map((step, sIdx) => (
                   <div key={sIdx} className="relative">
-                    <div className={cn("absolute -left-[25px] top-1.5 w-3 h-3 rounded-full border-2 border-white shadow-sm", dotColor)} />
-                    <p className="text-sm font-medium text-gray-700 leading-relaxed">{step}</p>
+                    <div className="absolute -left-[25px] top-1.5 w-2 h-2 rounded-full bg-white border border-black/20 shadow-sm z-10" />
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Step {sIdx + 1}</span>
+                      <p className="text-sm font-medium text-gray-800 leading-relaxed">{step}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             );
           case 'bento':
             return (
-              <div key={idx} className="grid grid-cols-2 gap-3">
+              <div key={idx} className="grid grid-cols-2 gap-4">
                 {contentArray.map((item, bIdx) => (
-                  <div key={bIdx} className={cn("p-4 rounded-2xl border flex flex-col justify-center min-h-[80px]", colorClasses)}>
-                    <p className="text-xs font-bold leading-snug">{item}</p>
+                  <div key={bIdx} className={cn("p-5 rounded-2xl border border-black/5 flex flex-col justify-center min-h-[100px] shadow-sm hover:shadow-md transition-shadow", colorClasses)}>
+                    <p className="text-xs font-bold leading-relaxed tracking-tight">{item}</p>
                   </div>
                 ))}
               </div>
             );
           case 'list':
             return (
-              <ul key={idx} className="space-y-3">
+              <div key={idx} className="space-y-4 relative pl-6">
+                <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-black/5" />
                 {contentArray.map((item, lIdx) => (
-                  <li key={lIdx} className="flex items-start gap-3 text-sm text-gray-600">
-                    <span className={cn("mt-1.5 w-1.5 h-1.5 rounded-full shrink-0", dotColor)} />
+                  <div key={lIdx} className="flex items-start gap-3 text-sm text-gray-700 group">
+                    <div className="mt-2 w-1 h-1 rounded-full bg-black/20 group-hover:bg-black/40 transition-colors shrink-0" />
                     <span className="leading-relaxed">{item}</span>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             );
           default:
-            return <p key={idx} className="text-sm text-gray-600 leading-relaxed">{contentArray[0]}</p>;
+            return (
+              <div key={idx} className="relative pl-6">
+                <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-black/5" />
+                <p className="text-sm text-gray-600 leading-relaxed">{contentArray[0]}</p>
+              </div>
+            );
         }
       })}
     </div>
@@ -509,19 +530,19 @@ function MemoCard({ memo, onClick }: { memo: Memo; onClick: () => void }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={onClick}
-      className="ios-card p-4 mb-4 cursor-pointer active:scale-[0.98] transition-transform"
+      className="bg-white rounded-3xl p-5 mb-4 cursor-pointer active:scale-[0.98] transition-all border border-black/[0.03] shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
     >
-      <div className="flex justify-between items-start mb-2">
-        <span className="px-2 py-0.5 bg-[#007AFF]/10 text-[#007AFF] text-[10px] font-bold rounded uppercase tracking-wider">
+      <div className="flex justify-between items-center mb-3">
+        <span className="px-2 py-0.5 bg-[#1A1A1A]/5 text-[#1A1A1A] text-[9px] font-bold rounded uppercase tracking-[0.15em]">
           {memo.type}
         </span>
-        <div className="flex items-center gap-1 text-gray-400 text-[10px]">
+        <div className="flex items-center gap-1 text-gray-400 text-[9px] font-medium uppercase tracking-wider">
           <Clock className="w-3 h-3" />
           {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
-      <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">{memo.title}</h3>
-      <div className="text-sm text-gray-600 line-clamp-3 mb-3 prose prose-sm">
+      <h3 className="text-xl font-serif font-bold text-[#1A1A1A] mb-2 line-clamp-1 leading-tight">{memo.title}</h3>
+      <div className="text-sm text-gray-500 line-clamp-2 mb-4 leading-relaxed font-medium">
         {memo.blocks && Array.isArray(memo.blocks) ? (
           <p>
             {(() => {
@@ -539,16 +560,18 @@ function MemoCard({ memo, onClick }: { memo: Memo; onClick: () => void }) {
         )}
       </div>
       {memo.imageUrl && (
-        <div className="mb-3 rounded-lg overflow-hidden h-24">
-          <img src={memo.imageUrl} alt="Memo" className="w-full h-full object-cover" />
+        <div className="mb-4 rounded-2xl overflow-hidden h-32 border border-black/5">
+          <img src={memo.imageUrl} alt="Memo" className="w-full h-full object-cover grayscale-[0.2] hover:grayscale-0 transition-all" />
         </div>
       )}
-      <div className="flex items-center justify-between pt-3 border-t border-black/5">
-        <div className="flex items-center gap-1 text-gray-400 text-[10px] font-medium">
+      <div className="flex items-center justify-between pt-4 border-t border-black/[0.03]">
+        <div className="flex items-center gap-1.5 text-gray-400 text-[9px] font-bold uppercase tracking-widest">
           <Calendar className="w-3 h-3" />
           {date.toLocaleDateString('zh-CN')}
         </div>
-        <ChevronRight className="w-4 h-4 text-gray-300" />
+        <div className="w-6 h-6 rounded-full bg-black/[0.02] flex items-center justify-center">
+          <ChevronRight className="w-3 h-3 text-gray-300" />
+        </div>
       </div>
     </motion.div>
   );
@@ -1013,83 +1036,100 @@ export default function App() {
         minute: '2-digit'
       });
 
-      // Vibrant, structured styling for social media sharing
+      // Elegant, professional styling for social media sharing
       container.innerHTML = `
-        <div style="padding: 40px; font-family: 'Inter', -apple-system, sans-serif; background: #F2F2F7;">
+        <div style="padding: 60px; font-family: 'Inter', -apple-system, sans-serif; background: #F5F5F0;">
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
             
             .card-main {
-              background: white;
-              border-radius: 40px;
-              padding: 60px;
-              box-shadow: 0 30px 60px rgba(0,0,0,0.1);
+              background: #FDFDFB;
+              border-radius: 48px;
+              padding: 80px;
+              box-shadow: 0 40px 100px rgba(0,0,0,0.05);
+              border: 1px solid rgba(0,0,0,0.03);
               overflow: hidden;
+              position: relative;
             }
 
             .header-group {
-              margin-bottom: 50px;
+              margin-bottom: 60px;
+              text-align: center;
             }
 
             .brand-badge {
-              display: inline-flex;
-              align-items: center;
-              gap: 8px;
-              background: #007AFF;
+              display: inline-block;
+              background: #1A1A1A;
               color: white;
-              padding: 8px 18px;
+              padding: 6px 16px;
               border-radius: 100px;
-              font-size: 12px;
+              font-size: 10px;
               font-weight: 800;
               text-transform: uppercase;
-              letter-spacing: 0.15em;
-              margin-bottom: 24px;
-              box-shadow: 0 4px 12px rgba(0,122,255,0.3);
+              letter-spacing: 0.25em;
+              margin-bottom: 30px;
             }
 
             .memo-title {
               font-family: 'Playfair Display', serif;
-              font-size: 48px;
+              font-size: 56px;
               font-weight: 700;
-              margin: 0 0 20px 0;
-              color: #000;
+              margin: 0 0 24px 0;
+              color: #1A1A1A;
               line-height: 1.1;
-              letter-spacing: -0.02em;
+              letter-spacing: -0.03em;
             }
 
             .memo-meta {
               display: flex;
               align-items: center;
-              gap: 15px;
-              font-size: 14px;
-              color: #8E8E93;
-              font-weight: 600;
+              justify-content: center;
+              gap: 20px;
+              font-size: 12px;
+              color: #AEAEB2;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.1em;
             }
 
             .insight-section {
-              background: linear-gradient(135deg, #007AFF, #5856D6);
-              color: white;
-              padding: 40px;
-              border-radius: 32px;
-              margin-bottom: 40px;
+              background: white;
+              padding: 50px;
+              border-radius: 40px;
+              margin-bottom: 50px;
               position: relative;
-              box-shadow: 0 15px 35px rgba(0,122,255,0.25);
+              border: 1px solid rgba(0,0,0,0.03);
+              box-shadow: 0 10px 40px rgba(0,0,0,0.02);
+            }
+
+            .insight-section::before {
+              content: "";
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 6px;
+              height: 100%;
+              background: #1A1A1A;
+              opacity: 0.1;
             }
 
             .insight-label {
-              font-size: 11px;
+              font-size: 10px;
               font-weight: 800;
               text-transform: uppercase;
-              letter-spacing: 0.2em;
-              opacity: 0.7;
-              margin-bottom: 15px;
+              letter-spacing: 0.3em;
+              color: #AEAEB2;
+              margin-bottom: 20px;
               display: block;
             }
 
             .insight-text {
-              font-size: 22px;
-              font-weight: 600;
+              font-family: 'Playfair Display', serif;
+              font-style: italic;
+              font-size: 26px;
+              font-weight: 500;
               line-height: 1.5;
+              color: #1A1A1A;
               margin: 0;
               white-space: pre-wrap;
             }
@@ -1097,177 +1137,202 @@ export default function App() {
             .blocks-grid {
               display: flex;
               flex-direction: column;
-              gap: 24px;
+              gap: 30px;
             }
 
             .block-card {
-              border-radius: 28px;
-              padding: 35px;
-              border: 1px solid rgba(0,0,0,0.05);
+              border-radius: 32px;
+              padding: 45px;
+              border: 1px solid rgba(0,0,0,0.03);
               position: relative;
+              background: white;
             }
 
-            /* Block Colors */
-            .block-blue { background: #F0F7FF; border-left: 6px solid #007AFF; }
-            .block-emerald { background: #F0FDF4; border-left: 6px solid #10B981; }
-            .block-amber { background: #FFFBEB; border-left: 6px solid #F59E0B; }
-            .block-violet { background: #F5F3FF; border-left: 6px solid #8B5CF6; }
-            .block-rose { background: #FFF1F2; border-left: 6px solid #F43F5E; }
-            .block-slate { background: #F8FAFC; border-left: 6px solid #64748B; }
+            .block-indent-line {
+              position: absolute;
+              left: 0;
+              top: 0;
+              bottom: 0;
+              width: 1px;
+              background: rgba(0,0,0,0.05);
+            }
+
+            /* Block Colors - Refined */
+            .block-blue { background: #F0F7FF; }
+            .block-emerald { background: #F0FDF4; }
+            .block-amber { background: #FFFBEB; }
+            .block-violet { background: #F5F3FF; }
+            .block-rose { background: #FFF1F2; }
+            .block-slate { background: #F8FAFC; }
 
             .block-header {
               display: flex;
               align-items: center;
-              gap: 15px;
-              margin-bottom: 20px;
+              gap: 18px;
+              margin-bottom: 24px;
             }
 
             .block-icon-circle {
-              width: 40px;
-              height: 40px;
+              width: 44px;
+              height: 44px;
               background: white;
-              border-radius: 12px;
+              border-radius: 14px;
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 20px;
-              box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+              font-size: 22px;
+              box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+              border: 1px solid rgba(0,0,0,0.02);
             }
 
             .block-title {
-              font-size: 20px;
+              font-size: 22px;
               font-weight: 800;
-              color: #1C1C1E;
+              color: #1A1A1A;
               letter-spacing: -0.01em;
             }
 
             .block-content {
-              font-size: 16px;
-              color: #2C2C2E;
-              line-height: 1.7;
+              font-size: 17px;
+              color: #3A3A3C;
+              line-height: 1.8;
+              font-weight: 500;
             }
 
             .block-content ul {
-              padding-left: 20px;
+              padding-left: 24px;
               margin: 0;
+              list-style: none;
             }
 
             .block-content li {
-              margin-bottom: 12px;
+              margin-bottom: 16px;
+              position: relative;
+            }
+
+            .block-content li::before {
+              content: "";
+              position: absolute;
+              left: -20px;
+              top: 12px;
+              width: 4px;
+              height: 4px;
+              border-radius: 50%;
+              background: rgba(0,0,0,0.2);
             }
 
             .todo-list-box {
-              margin-top: 25px;
-              background: rgba(255,255,255,0.6);
-              border-radius: 20px;
-              padding: 10px;
-              border: 1px solid rgba(0,0,0,0.03);
+              margin-top: 30px;
+              background: rgba(255,255,255,0.8);
+              border-radius: 24px;
+              padding: 15px;
+              border: 1px solid rgba(0,0,0,0.02);
             }
 
             .todo-row {
               display: flex;
-              padding: 15px 20px;
-              border-bottom: 1px solid rgba(0,0,0,0.05);
+              padding: 18px 24px;
+              border-bottom: 1px solid rgba(0,0,0,0.03);
               align-items: flex-start;
-              gap: 15px;
+              gap: 18px;
             }
             .todo-row:last-child { border-bottom: none; }
 
             .todo-check {
-              width: 22px;
-              height: 22px;
-              border: 2.5px solid #007AFF;
-              border-radius: 7px;
+              width: 24px;
+              height: 24px;
+              border: 1px solid #1A1A1A;
+              border-radius: 8px;
               flex-shrink: 0;
               margin-top: 2px;
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 12px;
-              color: #007AFF;
-              background: white;
+              font-size: 14px;
+              color: white;
+              background: #1A1A1A;
             }
 
             .todo-text-main {
-              font-size: 16px;
+              font-size: 17px;
               font-weight: 700;
-              color: #1C1C1E;
+              color: #1A1A1A;
             }
 
             .raw-dark-box {
-              background: #1C1C1E;
-              color: #D1D1D6;
-              padding: 40px;
-              border-radius: 32px;
+              background: #1A1A1A;
+              color: #8E8E93;
+              padding: 50px;
+              border-radius: 40px;
               font-family: 'JetBrains Mono', monospace;
               font-size: 13px;
               line-height: 1.8;
               white-space: pre-wrap;
-              margin-top: 60px;
+              margin-top: 80px;
               position: relative;
             }
 
             .raw-label {
               position: absolute;
               top: -12px;
-              left: 40px;
+              left: 50px;
               background: #3A3A3C;
               color: white;
-              padding: 4px 12px;
-              border-radius: 6px;
+              padding: 5px 15px;
+              border-radius: 8px;
               font-size: 10px;
               font-weight: 800;
               text-transform: uppercase;
-              letter-spacing: 0.1em;
+              letter-spacing: 0.2em;
             }
 
             .footer-section {
-              margin-top: 80px;
+              margin-top: 100px;
               text-align: center;
-              padding-top: 40px;
-              border-top: 2px solid #F2F2F7;
+              padding-top: 50px;
+              border-top: 1px solid rgba(0,0,0,0.05);
             }
 
             .footer-logo-text {
-              font-size: 18px;
+              font-family: 'Playfair Display', serif;
+              font-size: 22px;
               font-weight: 900;
-              color: #007AFF;
+              color: #1A1A1A;
               letter-spacing: 0.05em;
-              margin-bottom: 6px;
+              margin-bottom: 10px;
             }
 
             .footer-tagline {
-              font-size: 11px;
-              color: #8E8E93;
+              font-size: 10px;
+              color: #AEAEB2;
               text-transform: uppercase;
-              letter-spacing: 0.2em;
-              font-weight: 600;
+              letter-spacing: 0.4em;
+              font-weight: 700;
             }
           </style>
           
           <div class="card-main">
             <div class="header-group">
               <div class="brand-badge">
-                <span>✨</span>
                 <span>${memo.type}</span>
               </div>
               <h1 class="memo-title">${memo.title}</h1>
               <div class="memo-meta">
-                <span>📅 ${dateStr}</span>
-                <span style="opacity: 0.2;">•</span>
-                <span>DOC ID: SM-${memo.id.slice(-6).toUpperCase()}</span>
+                <span>${dateStr}</span>
+                <span style="opacity: 0.2;">/</span>
+                <span>SM-${memo.id.slice(-6).toUpperCase()}</span>
               </div>
             </div>
 
             ${memo.imageUrl ? `
-              <div style="margin-bottom: 50px; border-radius: 32px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
-                <img src="${memo.imageUrl}" style="width: 100%; display: block;" />
+              <div style="margin-bottom: 60px; border-radius: 40px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.1); border: 1px solid rgba(0,0,0,0.05);">
+                <img src="${memo.imageUrl}" style="width: 100%; display: block; grayscale: 0.1;" />
               </div>
             ` : ''}
 
             ${memo.content ? `
               <div class="insight-section">
-                <span class="insight-label">AI 核心洞察</span>
+                <span class="insight-label">AI Core Insight</span>
                 <p class="insight-text">${memo.content}</p>
               </div>
             ` : ''}
@@ -1283,6 +1348,7 @@ export default function App() {
                   const colorClass = 'block-' + (block.color || 'slate');
                   return `
                     <div class="block-card ${colorClass}">
+                      <div class="block-indent-line"></div>
                       <div class="block-header">
                         <div class="block-icon-circle">${icon}</div>
                         <div class="block-title">${block.title || block.type.toUpperCase()}</div>
@@ -1399,30 +1465,25 @@ export default function App() {
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
         <style>
           :root {
-            --primary: #007AFF;
-            --primary-dark: #0056b3;
-            --primary-light: #f0f7ff;
-            --accent: #5856D6;
-            --bg-soft: #F8F9FA;
-            --text-main: #1C1C1E;
-            --text-muted: #636366;
-            --text-light: #8E8E93;
-            --border: #E5E5EA;
-            --ink: #141414;
+            --bg: #FDFDFB;
+            --ink: #1A1A1A;
+            --muted: #AEAEB2;
+            --line: rgba(0,0,0,0.05);
+            --accent: #1A1A1A;
           }
           
           @media print {
             @page { 
-              margin: 1.5cm; 
+              margin: 2cm; 
               size: A4;
             }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
 
           body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Inter', -apple-system, sans-serif;
             line-height: 1.6;
-            color: var(--text-main);
+            color: var(--ink);
             padding: 0;
             margin: 0;
             background: white;
@@ -1431,246 +1492,210 @@ export default function App() {
           .container {
             max-width: 800px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 40px;
           }
 
           /* Header Section */
           .report-header {
-            border-left: 8px solid var(--primary);
-            padding: 20px 0 20px 30px;
-            margin-bottom: 50px;
-            background: linear-gradient(to right, var(--primary-light), transparent);
+            text-align: center;
+            margin-bottom: 80px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid var(--line);
           }
 
-          .type-label {
-            font-family: 'Inter';
-            font-size: 11px;
+          .type-badge {
+            display: inline-block;
+            background: var(--ink);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 9px;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.15em;
-            color: var(--primary);
-            margin-bottom: 8px;
-            display: block;
+            letter-spacing: 0.2em;
+            margin-bottom: 20px;
           }
 
           h1 {
             font-family: 'Playfair Display', serif;
-            font-size: 38px;
+            font-size: 42px;
             font-weight: 700;
-            margin: 0;
+            margin: 0 0 20px 0;
             color: var(--ink);
             line-height: 1.1;
+            letter-spacing: -0.02em;
           }
 
           .meta-bar {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border);
-            font-size: 12px;
-            color: var(--text-light);
-            font-weight: 500;
-          }
-
-          /* Section Styling */
-          .section {
-            margin-bottom: 60px;
-            position: relative;
-          }
-
-          .section-header {
-            display: flex;
-            align-items: baseline;
-            gap: 15px;
-            margin-bottom: 25px;
-          }
-
-          .section-num {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            color: var(--primary);
+            justify-content: center;
+            gap: 30px;
+            font-size: 11px;
+            color: var(--muted);
             font-weight: 700;
-            opacity: 0.6;
-          }
-
-          .section-title {
-            font-size: 13px;
-            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.1em;
-            color: var(--text-muted);
           }
 
-          .section-line {
-            flex: 1;
-            height: 1px;
-            background: var(--border);
-          }
-
-          /* Summary Card */
-          .summary-box {
-            background: var(--bg-soft);
-            border-radius: 20px;
-            padding: 35px;
+          /* Insight Section */
+          .insight-section {
+            background: #F8F8F5;
+            padding: 50px;
+            border-radius: 32px;
+            margin-bottom: 60px;
             position: relative;
-            overflow: hidden;
+            border-left: 4px solid var(--ink);
           }
 
-          .summary-box::before {
-            content: '"';
-            position: absolute;
-            top: -20px;
-            left: 20px;
-            font-family: 'Playfair Display';
-            font-size: 120px;
-            color: var(--primary);
-            opacity: 0.08;
-          }
-
-          .summary-text {
-            font-size: 18px;
-            font-weight: 500;
-            color: var(--text-main);
-            line-height: 1.7;
-            position: relative;
-            z-index: 1;
-            white-space: pre-wrap;
-          }
-
-          /* Block Cards */
-          .blocks-container {
-            display: grid;
-            gap: 30px;
-          }
-
-          .block-card {
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 30px;
-            page-break-inside: avoid;
-            transition: all 0.2s ease;
-          }
-
-          .block-head {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+          .insight-label {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            color: var(--muted);
             margin-bottom: 20px;
+            display: block;
           }
 
-          .block-icon {
-            width: 36px;
-            height: 36px;
-            background: var(--primary-light);
-            color: var(--primary);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-          }
-
-          .block-title {
-            font-size: 20px;
-            font-weight: 700;
+          .insight-text {
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+            font-size: 22px;
+            font-weight: 500;
+            line-height: 1.5;
             color: var(--ink);
-          }
-
-          .block-body {
-            font-size: 15px;
-            color: #333;
-          }
-
-          .block-body ul {
-            padding-left: 20px;
             margin: 0;
           }
 
-          .block-body li {
-            margin-bottom: 10px;
+          /* Blocks */
+          .blocks-container {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+          }
+
+          .block-card {
+            position: relative;
+            padding-left: 30px;
+            page-break-inside: avoid;
+          }
+
+          .block-line {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: var(--line);
+          }
+
+          .block-title {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--muted);
+            margin-bottom: 15px;
+          }
+
+          .block-content {
+            font-size: 14px;
+            color: #333;
+            line-height: 1.8;
+          }
+
+          .block-content ul {
+            padding-left: 20px;
+            margin: 0;
+            list-style: none;
+          }
+
+          .block-content li {
+            margin-bottom: 12px;
+            position: relative;
+          }
+
+          .block-content li::before {
+            content: "";
+            position: absolute;
+            left: -20px;
+            top: 10px;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.1);
           }
 
           /* Todo List */
           .todo-box {
-            margin-top: 25px;
-            background: #fff;
-            border: 1px solid var(--border);
+            margin-top: 20px;
+            border: 1px solid var(--line);
             border-radius: 16px;
             overflow: hidden;
           }
 
           .todo-row {
             display: flex;
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--border);
-            align-items: flex-start;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--line);
+            align-items: center;
             gap: 15px;
           }
-
           .todo-row:last-child { border-bottom: none; }
 
           .todo-check {
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--primary);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            color: var(--primary);
-            margin-top: 2px;
+            width: 16px;
+            height: 16px;
+            border: 1px solid var(--ink);
+            border-radius: 4px;
             flex-shrink: 0;
           }
-
-          .todo-content { flex: 1; }
-
-          .todo-task { font-weight: 600; font-size: 15px; }
-
-          .todo-meta {
-            display: flex;
-            gap: 15px;
-            margin-top: 5px;
-            font-size: 12px;
-            color: var(--text-light);
+          .todo-check.checked {
+            background: var(--ink);
           }
 
-          /* Raw Text Section */
+          .todo-text {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink);
+          }
+
+          /* Raw Text */
           .raw-section {
-            margin-top: 80px;
-            page-break-before: always;
+            margin-top: 100px;
+            padding-top: 50px;
+            border-top: 1px solid var(--line);
+            page-break-before: auto;
           }
 
           .raw-header {
-            font-family: 'JetBrains Mono';
-            font-size: 11px;
+            font-size: 9px;
+            font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.2em;
-            color: var(--text-light);
+            letter-spacing: 0.3em;
+            color: var(--muted);
             margin-bottom: 20px;
             display: block;
             text-align: center;
           }
 
-          .raw-wrapper {
-            background: #1c1c1e;
-            color: #d1d1d6;
-            padding: 40px;
-            border-radius: 24px;
+          .raw-content {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
+            font-size: 11px;
+            color: #8E8E93;
             line-height: 1.8;
             white-space: pre-wrap;
+            background: #F8F8F5;
+            padding: 30px;
+            border-radius: 20px;
           }
 
-          /* Image Handling */
+          /* Image */
           .image-container {
-            margin-bottom: 50px;
-            border-radius: 24px;
+            margin-bottom: 60px;
+            border-radius: 32px;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid var(--line);
           }
 
           .image-container img {
@@ -1679,26 +1704,24 @@ export default function App() {
           }
 
           .footer {
-            margin-top: 80px;
-            padding-top: 30px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            font-size: 10px;
-            color: var(--text-light);
+            margin-top: 100px;
+            text-align: center;
+            font-size: 9px;
+            color: var(--muted);
             text-transform: uppercase;
-            letter-spacing: 0.1em;
+            letter-spacing: 0.4em;
+            font-weight: 700;
           }
         </style>
       </head>
       <body>
         <div class="container">
           <header class="report-header">
-            <span class="type-label">${memo.type}</span>
+            <div class="type-badge">${memo.type}</div>
             <h1>${memo.title}</h1>
             <div class="meta-bar">
-              <span>日期：${dateStr}</span>
-              <span>文档编号：SM-${memo.id.slice(-6).toUpperCase()}</span>
+              <span>${dateStr}</span>
+              <span>SM-${memo.id.slice(-6).toUpperCase()}</span>
             </div>
           </header>
 
@@ -1709,79 +1732,46 @@ export default function App() {
           ` : ''}
 
           ${memo.content ? `
-            <section class="section">
-              <div class="section-header">
-                <span class="section-num">01</span>
-                <span class="section-title">AI 核心总结</span>
-                <div class="section-line"></div>
-              </div>
-              <div class="summary-box">
-                <div class="summary-text">${memo.content}</div>
-              </div>
-            </section>
+            <div class="insight-section">
+              <span class="insight-label">AI Core Insight</span>
+              <p class="insight-text">${memo.content}</p>
+            </div>
           ` : ''}
 
-          ${memo.blocks ? `
-            <section class="section">
-              <div class="section-header">
-                <span class="section-num">02</span>
-                <span class="section-title">结构化深度分析</span>
-                <div class="section-line"></div>
-              </div>
-              <div class="blocks-container">
-                ${memo.blocks.map((block, idx) => {
-                  const icon = block.type === 'todo' ? '✅' : 
-                               block.type === 'highlight' ? '💡' :
-                               block.type === 'quote' ? '💬' :
-                               block.type === 'step' ? '🔢' :
-                               block.type === 'bento' ? '🍱' : '📄';
-                  return `
-                    <div class="block-card">
-                      <div class="block-head">
-                        <div class="block-icon">${icon}</div>
-                        <div class="block-title">${block.title || block.type.toUpperCase()}</div>
-                      </div>
-                      <div class="block-body">
-                        ${Array.isArray(block.content) ? `
-                          <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
-                        ` : `<p>${block.content}</p>`}
-                        
-                        ${block.todoItems ? `
-                          <div class="todo-box">
-                            ${block.todoItems.map(item => `
-                              <div class="todo-row">
-                                <div class="todo-check">${item.completed ? '✓' : ''}</div>
-                                <div class="todo-content">
-                                  <div class="todo-task">${item.task}</div>
-                                  ${item.time || item.notes ? `
-                                    <div class="todo-meta">
-                                      ${item.time ? `<span>⏰ ${item.time}</span>` : ''}
-                                      ${item.notes ? `<span>📝 ${item.notes}</span>` : ''}
-                                    </div>
-                                  ` : ''}
-                                </div>
-                              </div>
-                            `).join('')}
-                          </div>
-                        ` : ''}
-                      </div>
+          <div class="blocks-container">
+            ${memo.blocks ? memo.blocks.map(block => `
+              <div class="block-card">
+                <div class="block-line"></div>
+                <div class="block-title">${block.title || block.type.toUpperCase()}</div>
+                <div class="block-content">
+                  ${Array.isArray(block.content) ? `
+                    <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
+                  ` : `<p>${block.content}</p>`}
+                  
+                  ${block.todoItems ? `
+                    <div class="todo-box">
+                      ${block.todoItems.map(item => `
+                        <div class="todo-row">
+                          <div class="todo-check ${item.completed ? 'checked' : ''}"></div>
+                          <div class="todo-text">${item.task}</div>
+                        </div>
+                      `).join('')}
                     </div>
-                  `;
-                }).join('')}
+                  ` : ''}
+                </div>
               </div>
-            </section>
-          ` : ''}
+            `).join('') : `<p>${memo.content}</p>`}
+          </div>
 
           ${memo.rawText ? `
-            <section class="raw-section">
-              <span class="raw-header">--- 原始记录存档 ---</span>
-              <div class="raw-wrapper">${memo.rawText}</div>
-            </section>
+            <div class="raw-section">
+              <span class="raw-header">Raw Input Archive</span>
+              <div class="raw-content">${memo.rawText}</div>
+            </div>
           ` : ''}
 
           <footer class="footer">
-            <span>Smart Memo AI Assistant</span>
-            <span>Page 1 of 1</span>
+            Generated by Smart Memo • AI Powered Knowledge Management
           </footer>
         </div>
 
@@ -2108,64 +2098,78 @@ export default function App() {
                 <button onClick={() => handleDeleteMemo(selectedMemo.id)} className="ios-button"><Trash2 className="w-5 h-5 text-red-500" /></button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 print-content" ref={printRef}>
-              <div className="flex items-center gap-2 mb-4 no-print">
-                <span className="px-2 py-0.5 bg-[#007AFF]/10 text-[#007AFF] text-[10px] font-bold rounded uppercase tracking-wider">{selectedMemo.type}</span>
-                <span className="text-xs text-gray-400">{new Date(selectedMemo.timestamp).toLocaleString()}</span>
+            <div className="flex-1 overflow-y-auto p-8 print-content bg-[#FDFDFB]" ref={printRef}>
+              <div className="max-w-2xl mx-auto">
+                <div className="flex items-center justify-between mb-10 no-print">
+                  <div className="flex items-center gap-3">
+                    <span className="px-3 py-1 bg-[#1A1A1A] text-white text-[9px] font-bold rounded-full uppercase tracking-[0.2em]">{selectedMemo.type}</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{new Date(selectedMemo.timestamp).toLocaleDateString('zh-CN')}</span>
+                  </div>
+                  <div className="h-[1px] flex-1 bg-black/5 mx-6" />
+                  <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">SM-${selectedMemo.id.slice(-6).toUpperCase()}</div>
+                </div>
+                
+                <h2 className="text-4xl font-serif font-bold mb-10 text-[#1A1A1A] leading-tight tracking-tight">{selectedMemo.title}</h2>
+                
+                {selectedMemo.imageUrl && (
+                  <div className="mb-12 rounded-3xl overflow-hidden shadow-2xl shadow-black/5 border border-black/5">
+                    <img 
+                      src={selectedMemo.imageUrl} 
+                      alt="Memo" 
+                      className="w-full grayscale-[0.1] hover:grayscale-0 transition-all duration-700" 
+                      crossOrigin="anonymous"
+                    />
+                  </div>
+                )}
+
+                {selectedMemo.blocks && selectedMemo.content && (
+                  <div className="mb-12 p-10 bg-white rounded-[2.5rem] border border-black/[0.03] shadow-[0_10px_40px_rgba(0,0,0,0.02)] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-[#1A1A1A]/10" />
+                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] mb-6">AI Core Insight</h4>
+                    <p className="text-xl font-serif italic text-[#1A1A1A] leading-relaxed">{selectedMemo.content}</p>
+                  </div>
+                )}
+
+                {selectedMemo.rawText && selectedMemo.type === '好文收藏' && (
+                  <div className="mb-12 p-8 bg-[#F8F8F5] rounded-3xl border border-black/5">
+                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Original Archive</h4>
+                    <p className="text-sm text-gray-600 line-clamp-[10] overflow-y-auto max-h-64 leading-relaxed font-medium">{selectedMemo.rawText}</p>
+                  </div>
+                )}
+
+                <div className="mb-16">
+                  {selectedMemo.blocks ? (
+                    <StructuredRenderer 
+                      blocks={selectedMemo.blocks} 
+                      onToggleTodo={(bIdx, iIdx) => handleToggleTodo(selectedMemo.id, bIdx, iIdx)} 
+                    />
+                  ) : (
+                    <div className="prose prose-slate max-w-none font-medium text-gray-700 leading-relaxed">
+                      <ReactMarkdown>{selectedMemo.content}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+                
+                {selectedMemo.audioUrl && (
+                  <div className="mb-12 no-print p-6 bg-white rounded-3xl border border-black/5 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Audio Recording</span>
+                    </div>
+                    <audio controls src={selectedMemo.audioUrl} className="w-full" />
+                  </div>
+                )}
+
+                {selectedMemo.rawText && selectedMemo.type !== '好文收藏' && (
+                  <div className="mt-20 pt-10 border-t border-black/5 no-print">
+                    <div className="flex items-center gap-4 mb-6">
+                      <h4 className="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em] whitespace-nowrap">Raw Input Archive</h4>
+                      <div className="h-[1px] flex-1 bg-black/5" />
+                    </div>
+                    <p className="text-sm text-gray-400 italic leading-relaxed font-medium">{selectedMemo.rawText}</p>
+                  </div>
+                )}
               </div>
-              
-              {/* Print-only header */}
-              <div className="hidden print:block print-only-header mb-8 border-b border-gray-200 pb-4">
-                <div className="text-[10pt] text-gray-500 mb-1">{selectedMemo.type}</div>
-                <div className="text-[10pt] text-gray-500">{new Date(selectedMemo.timestamp).toLocaleString()}</div>
-              </div>
-
-              <h2 className="text-3xl font-bold mb-6">{selectedMemo.title}</h2>
-              
-              {selectedMemo.blocks && selectedMemo.content && (
-                <div className="mb-8 p-6 bg-[#007AFF]/5 rounded-3xl border border-[#007AFF]/10">
-                  <h4 className="text-[10px] font-bold text-[#007AFF] uppercase tracking-widest mb-3 opacity-60">AI 核心解读</h4>
-                  <p className="text-lg font-medium text-gray-800 leading-relaxed">{selectedMemo.content}</p>
-                </div>
-              )}
-
-              {selectedMemo.rawText && selectedMemo.type === '好文收藏' && (
-                <div className="mb-8 p-4 bg-black/5 rounded-2xl border border-black/5">
-                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">原文内容</h4>
-                  <p className="text-sm text-gray-600 line-clamp-[10] overflow-y-auto max-h-48">{selectedMemo.rawText}</p>
-                </div>
-              )}
-
-              {selectedMemo.blocks ? (
-                <StructuredRenderer 
-                  blocks={selectedMemo.blocks} 
-                  onToggleTodo={(bIdx, iIdx) => handleToggleTodo(selectedMemo.id, bIdx, iIdx)} 
-                />
-              ) : (
-                <div className="prose prose-slate max-w-none"><ReactMarkdown>{selectedMemo.content}</ReactMarkdown></div>
-              )}
-              
-              {selectedMemo.imageUrl && (
-                <img 
-                  src={selectedMemo.imageUrl} 
-                  alt="Memo" 
-                  className="w-full rounded-2xl mb-6 shadow-sm" 
-                  crossOrigin="anonymous"
-                />
-              )}
-              
-              {selectedMemo.audioUrl && (
-                <div className="mb-6 no-print">
-                  <audio controls src={selectedMemo.audioUrl} className="w-full" />
-                </div>
-              )}
-
-              {selectedMemo.rawText && selectedMemo.type !== '好文收藏' && (
-                <div className="mt-12 pt-6 border-t border-black/5 no-print">
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">原始输入</h4>
-                  <p className="text-sm text-gray-500 italic">{selectedMemo.rawText}</p>
-                </div>
-              )}
             </div>
           </motion.div>
         )}
