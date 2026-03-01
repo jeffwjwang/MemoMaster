@@ -1035,16 +1035,206 @@ export default function App() {
 
   const handlePrintToPDF = (memo: Memo) => {
     setIsShareSheetOpen(false);
-    const originalTitle = document.title;
-    const fileName = `[${memo.type}]_${memo.title}_${new Date().toISOString().split('T')[0]}`;
     
-    document.title = fileName;
+    // Create a hidden iframe for printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) return;
+
+    const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN');
     
-    // Small delay to ensure UI is ready
-    setTimeout(() => {
-      window.print();
-      document.title = originalTitle;
-    }, 100);
+    // Construct the print-friendly HTML
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>[${memo.type}] ${memo.title}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+          body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: #1a1a1a;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+          }
+          .header {
+            border-bottom: 2px solid #007AFF;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .type-tag {
+            display: inline-block;
+            background: #007AFF;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+          }
+          h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: #000;
+          }
+          .meta {
+            font-size: 12px;
+            color: #8E8E93;
+            margin-top: 8px;
+          }
+          .content-section {
+            margin-bottom: 40px;
+          }
+          .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8E8E93;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #E5E5EA;
+            padding-bottom: 5px;
+          }
+          .summary {
+            font-size: 16px;
+            white-space: pre-wrap;
+          }
+          .block {
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+          }
+          .block-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #007AFF;
+          }
+          .block-content {
+            font-size: 15px;
+          }
+          .todo-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 8px;
+          }
+          .todo-checkbox {
+            margin-right: 10px;
+            margin-top: 5px;
+          }
+          .todo-text {
+            flex: 1;
+          }
+          .todo-meta {
+            font-size: 12px;
+            color: #8E8E93;
+            margin-top: 2px;
+          }
+          .raw-text {
+            font-size: 14px;
+            color: #636366;
+            font-style: italic;
+            background: #F2F2F7;
+            padding: 20px;
+            border-radius: 12px;
+            white-space: pre-wrap;
+          }
+          img {
+            max-width: 100%;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: block;
+          }
+          @media print {
+            body { padding: 0; }
+            @page { margin: 2cm; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="type-tag">${memo.type}</div>
+          <h1>${memo.title}</h1>
+          <div class="meta">生成时间: ${dateStr}</div>
+        </div>
+
+        ${memo.imageUrl ? `<img src="${memo.imageUrl}" />` : ''}
+
+        ${memo.content ? `
+          <div class="content-section">
+            <div class="section-title">AI 核心总结</div>
+            <div class="summary">${memo.content}</div>
+          </div>
+        ` : ''}
+
+        ${memo.blocks ? `
+          <div class="content-section">
+            <div class="section-title">详细分析</div>
+            ${memo.blocks.map(block => `
+              <div class="block">
+                <div class="block-title">${block.title || block.type.toUpperCase()}</div>
+                <div class="block-content">
+                  ${Array.isArray(block.content) ? `
+                    <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
+                  ` : `<p>${block.content}</p>`}
+                  
+                  ${block.todoItems ? `
+                    <div style="margin-top: 15px;">
+                      ${block.todoItems.map(item => `
+                        <div class="todo-item">
+                          <span class="todo-checkbox">${item.completed ? '☑' : '☐'}</span>
+                          <div class="todo-text">
+                            <div>${item.task}</div>
+                            ${item.time || item.notes ? `
+                              <div class="todo-meta">
+                                ${item.time ? `⏰ ${item.time}` : ''} 
+                                ${item.notes ? `📝 ${item.notes}` : ''}
+                              </div>
+                            ` : ''}
+                          </div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+
+        ${memo.rawText ? `
+          <div class="content-section" style="page-break-before: always;">
+            <div class="section-title">原始记录</div>
+            <div class="raw-text">${memo.rawText}</div>
+          </div>
+        ` : ''}
+
+        <script>
+          window.onload = () => {
+            window.print();
+            setTimeout(() => {
+              window.frameElement.remove();
+            }, 1000);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    doc.open();
+    doc.write(html);
+    doc.close();
   };
 
   const handleShare = async (memo: Memo) => {
