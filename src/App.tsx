@@ -1180,11 +1180,11 @@ export default function App() {
     
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '-9999px';
+    iframe.style.width = '800px'; // Give it a width to ensure layout is calculated
+    iframe.style.height = '1000px';
+    iframe.style.visibility = 'hidden';
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
@@ -1593,12 +1593,39 @@ export default function App() {
         </div>
 
         <script>
-          window.onload = () => {
-            window.print();
+          async function prepareAndPrint() {
+            // 1. Wait for all images to load
+            const images = Array.from(document.querySelectorAll('img'));
+            const imagePromises = images.map(img => {
+              if (img.complete) return Promise.resolve();
+              return new Promise(resolve => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              });
+            });
+            
+            // 2. Wait for fonts to be ready
+            const fontPromise = document.fonts ? document.fonts.ready : Promise.resolve();
+            
+            try {
+              await Promise.all([...imagePromises, fontPromise]);
+            } catch (e) {
+              console.error("Resource loading failed", e);
+            }
+
+            // 3. Final layout stabilization delay
             setTimeout(() => {
-              window.frameElement.remove();
-            }, 1000);
-          };
+              window.print();
+              // Remove iframe after print dialog is closed
+              setTimeout(() => {
+                if (window.frameElement) {
+                  window.frameElement.remove();
+                }
+              }, 1000);
+            }, 800);
+          }
+
+          window.onload = prepareAndPrint;
         </script>
       </body>
       </html>
