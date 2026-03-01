@@ -232,38 +232,38 @@ async function analyzeMemo(
   const now = new Date();
   const currentTimeContext = `当前时间是: ${now.toLocaleString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 
-  let systemInstruction = `你是一位顶级的视觉化笔记与任务管理专家。你的任务是将用户的输入整理成极其结构化、视觉化的笔记。
-  你必须根据内容逻辑，将笔记拆分为不同的“块(blocks)”。
+  let systemInstruction = `你是一位顶级的视觉化笔记与任务管理专家，擅长将杂乱的输入转化为极具设计感的结构化笔记。
+  你的目标是：**全量信息迁移与视觉重构 (Full Content Migration & Visual Reconstruction)**。
   
   ${currentTimeContext}
-  请利用上述当前时间背景，智能解析用户提到的相对时间（如“明天”、“下周一”、“后天晚上”等）。
+  请利用上述当前时间背景，智能解析用户提到的相对时间。
 
   **核心原则：严禁虚构内容 (STRICT NO HALLUCINATION)**
   - 你只能基于用户提供的文字、图片或语音内容进行整理。
-  - **严禁生成用户未提及的任务、计划、待办事项或未来行动**。
-  - 除非是“任务清单”或“会议纪要”类型且内容中确实包含明确的任务，否则禁止使用 "todo" 块。
-  - 对于“好文收藏”，你的目标是“理解”和“分析”现有的内容精髓，**绝对禁止**虚构“后续计划”或“学习建议”。
+  - **严禁生成用户未提及的任务、计划或未来行动**。
+
+  **视觉重构准则：**
+  1. **禁止偷懒**：严禁仅提取几个关键词而忽略大部分原文信息。你必须将用户输入的 **100% 核心信息** 重新分配到各个“块(blocks)”中。
+  2. **信息密度**：每个块的内容必须充实、有深度。严禁生成只有标题没有内容的空洞块。
+  3. **视觉层次**：通过交替使用不同的块类型(type)和颜色(color)来创造“杂志排版”感。
+  4. **标题索引**：每个块必须配上一个精准、有吸引力的“小标题(title)”。
 
   可用块类型：
-  1. "todo": 仅用于内容中明确提到的任务。必须按类别归类。
-  2. "highlight": 用于核心金句、最重要的结论或定义。
-  3. "quote": 用于摘录原文/原图中的精彩片段。
-  4. "step": 用于有先后顺序的步骤、逻辑推导或时间线。
-  5. "bento": 用于并列的多个要点、分类说明，适合网格展示。
-  6. "text": 用于普通的段落描述。
-
-  任务清单(todo)要求：
-  - 必须包含：任务内容(task)、预计时间(time)、注意要点(notes)。
-  - **时间格式(time)**：必须包含具体的日期、星期几和时间。格式示例：“2026年3月1日 周日 14:00”。
-  - 初始状态 completed 必须为 false。
-  - 必须根据任务性质归类到合适的标题下。
+  1. "highlight": 用于核心洞察、金句或最重要的结论。
+  2. "quote": 用于摘录感性、优美或具有代表性的原文片段。
+  3. "step": 用于逻辑推导、时间线或有先后顺序的思考。
+  4. "bento": 用于并列的观察、分类说明或多维度细节，适合信息密集的网格展示。
+  5. "list": 用于具体的清单、项次编号或要点罗列。
+  6. "text": 用于经过你重新润色、分段、排版后的叙述性内容。
+  7. "todo": 仅用于内容中明确提到的具体任务。
 
   颜色分配建议：
-  - 蓝色(blue): 逻辑、技术、会议
-  - 绿色(emerald): 健身、成功、积极
-  - 黄色(amber): 灵感、重点、饭局
-  - 紫色(violet): 创意、深度、娱乐
-  - 红色(rose): 紧急、生活、碰面
+  - 蓝色(blue): 逻辑、技术、专业
+  - 绿色(emerald): 成功、积极、自然
+  - 黄色(amber): 灵感、温馨、提醒
+  - 紫色(violet): 创意、深度、情感
+  - 红色(rose): 紧急、生活、热烈
+  - 灰色(slate): 平静、客观、背景
   
   请务必使用中文回复，并严格遵守 JSON 格式。`;
 
@@ -289,18 +289,16 @@ async function analyzeMemo(
       - 综合分析：使用 bento 块分析用户收藏此内容的深层意图（如：审美积累、逻辑参考、数据佐证等）。`;
       break;
     case '日常随笔':
-      systemInstruction += `\n**重磅任务：全篇视觉化重构 (Visual Reconstruction)**
-      1. **严禁原文堆砌**：禁止将用户输入的大段文字直接放入单个 text 块。你必须将其视为“原材料”，重新设计成一份视觉笔记。
-      2. **深度拆解**：将随笔内容拆解为至少 5 个以上的块(blocks)。
-         - 每一段文字都必须找到最适合它的“视觉容器”：
-           - 抒情或感性的句子 -> "quote" 块。
-           - 核心洞察或金句 -> "highlight" 块（建议使用 emerald 或 violet）。
-           - 多个平行的观察、事物或细节 -> "bento" 块。
-           - 思考的逻辑演进或时间顺序 -> "step" 块。
-           - 具体的行动、清单或分类 -> "list" 块。
-      3. **增加视觉索引**：每个块必须配上一个极简的“小标题(title)”，用于建立视觉层次。
-      4. **色彩美学**：根据情绪分配颜色。温馨的用 amber，深邃的用 violet，平静的用 slate，逻辑性强的用 blue。
-      5. **目标**：最终呈现的效果应像是一份精心设计的杂志内页或专业手账，通过色块、线条和缩进引导阅读，而不是一篇普通的文章。`;
+      systemInstruction += `\n**【日常随笔专项指令：视觉笔记设计师模式】**
+      1. **全量迁移**：禁止将原文堆砌在 summary。你必须将随笔的 **全部实质内容** 拆解并重构进至少 6-10 个 blocks 中。
+      2. **排版即艺术**：
+         - 感性/抒情部分 -> "quote" 块。
+         - 核心感悟/金句 -> "highlight" 块。
+         - 细节观察/并列事物 -> "bento" 块。
+         - 思考逻辑/心路历程 -> "step" 块。
+         - 叙述性描述 -> 重新润色并分段后放入 "text" 块。
+      3. **视觉节奏**：严禁连续使用同一种块类型。请通过颜色和类型的交替，营造出“线条导引”和“缩进”的视觉美感。
+      4. **目标**：让用户在不看原文的情况下，通过这些色块就能读懂整篇随笔的灵魂、细节和逻辑。`;
       break;
   }
 
@@ -323,18 +321,18 @@ async function analyzeMemo(
           type: Type.OBJECT,
           properties: {
             title: { type: Type.STRING },
-            summary: { type: Type.STRING, description: "一句话总结" },
+            summary: { type: Type.STRING, description: "极简一句话引子，严禁超过30字" },
             blocks: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
                 properties: {
                   type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list", "todo", "quote"] },
-                  title: { type: Type.STRING },
+                  title: { type: Type.STRING, description: "块的小标题，必须存在以建立视觉索引" },
                   content: { 
                     type: Type.ARRAY, 
                     items: { type: Type.STRING },
-                    description: "内容数组"
+                    description: "内容数组，必须包含实质性、高密度的信息，严禁空洞"
                   },
                   todoItems: {
                     type: Type.ARRAY,
@@ -351,11 +349,11 @@ async function analyzeMemo(
                   },
                   color: { type: Type.STRING, enum: ["blue", "emerald", "amber", "violet", "rose", "slate"] }
                 },
-                required: ["type"]
+                required: ["type", "title", "content"]
               }
             }
           },
-          required: ["title", "blocks"]
+          required: ["title", "summary", "blocks"]
         }
       }
     });
