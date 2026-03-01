@@ -1368,12 +1368,16 @@ export default function App() {
     setIsShareSheetOpen(false);
     
     const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.left = '-9999px';
-    iframe.style.top = '-9999px';
-    iframe.style.width = '800px'; // Give it a width to ensure layout is calculated
+    // Use absolute positioning to move it off-screen instead of visibility:hidden
+    // which can cause blank prints in some browsers.
+    iframe.style.position = 'absolute';
+    iframe.style.top = '-10000px';
+    iframe.style.left = '0';
+    iframe.style.width = '1024px'; 
     iframe.style.height = '1000px';
-    iframe.style.visibility = 'hidden';
+    iframe.style.zIndex = '-1';
+    iframe.style.opacity = '0.01';
+    iframe.style.pointerEvents = 'none';
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
@@ -1782,7 +1786,11 @@ export default function App() {
         </div>
 
         <script>
+          let isPrinting = false;
           async function prepareAndPrint() {
+            if (isPrinting) return;
+            isPrinting = true;
+
             // 1. Wait for all images to load
             const images = Array.from(document.querySelectorAll('img'));
             const imagePromises = images.map(img => {
@@ -1804,6 +1812,7 @@ export default function App() {
 
             // 3. Final layout stabilization delay
             setTimeout(() => {
+              window.focus();
               window.print();
               // Remove iframe after print dialog is closed
               setTimeout(() => {
@@ -1811,10 +1820,13 @@ export default function App() {
                   window.frameElement.remove();
                 }
               }, 1000);
-            }, 800);
+            }, 1000);
           }
 
+          // Trigger print when everything is loaded
           window.onload = prepareAndPrint;
+          // Fallback in case onload doesn't fire as expected with doc.write
+          setTimeout(prepareAndPrint, 3000);
         </script>
       </body>
       </html>
