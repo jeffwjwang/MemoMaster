@@ -1001,8 +1001,8 @@ export default function App() {
       container.style.position = 'absolute';
       container.style.left = '-9999px';
       container.style.top = '0';
-      container.style.width = '800px'; // Fixed width for consistent layout
-      container.style.background = 'white';
+      container.style.width = '750px'; 
+      container.style.background = '#F2F2F7'; 
       document.body.appendChild(container);
 
       const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN', {
@@ -1013,99 +1013,291 @@ export default function App() {
         minute: '2-digit'
       });
 
-      // Reuse the beautiful styling logic
+      // Vibrant, structured styling for social media sharing
       container.innerHTML = `
-        <div style="padding: 60px; font-family: 'Inter', -apple-system, sans-serif; color: #1C1C1E; line-height: 1.6;">
+        <div style="padding: 40px; font-family: 'Inter', -apple-system, sans-serif; background: #F2F2F7;">
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
-            .report-header {
-              border-left: 8px solid #007AFF;
-              padding: 20px 0 20px 30px;
-              margin-bottom: 50px;
-              background: linear-gradient(to right, #f0f7ff, transparent);
+            
+            .card-main {
+              background: white;
+              border-radius: 40px;
+              padding: 60px;
+              box-shadow: 0 30px 60px rgba(0,0,0,0.1);
+              overflow: hidden;
             }
-            .type-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #007AFF; margin-bottom: 8px; display: block; }
-            h1 { font-family: 'Playfair Display', serif; font-size: 38px; font-weight: 700; margin: 0; color: #141414; line-height: 1.1; }
-            .meta-bar { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 20px; border-top: 1px solid #E5E5EA; font-size: 12px; color: #8E8E93; }
-            .section { margin-bottom: 60px; }
-            .section-header { display: flex; align-items: baseline; gap: 15px; margin-bottom: 25px; }
-            .section-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #007AFF; font-weight: 700; opacity: 0.6; }
-            .section-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: #636366; }
-            .section-line { flex: 1; height: 1px; background: #E5E5EA; }
-            .summary-box { background: #F8F9FA; border-radius: 20px; padding: 35px; position: relative; }
-            .summary-text { font-size: 18px; font-weight: 500; color: #1C1C1E; line-height: 1.7; white-space: pre-wrap; }
-            .block-card { border: 1px solid #E5E5EA; border-radius: 24px; padding: 30px; margin-bottom: 30px; background: white; }
-            .block-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-            .block-icon { width: 36px; height: 36px; background: #f0f7ff; color: #007AFF; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-            .block-title { font-size: 20px; font-weight: 700; color: #141414; }
-            .block-body { font-size: 15px; color: #333; }
-            .block-body ul { padding-left: 20px; margin: 0; }
-            .block-body li { margin-bottom: 10px; }
-            .todo-box { margin-top: 25px; background: #fff; border: 1px solid #E5E5EA; border-radius: 16px; overflow: hidden; }
-            .todo-row { display: flex; padding: 15px 20px; border-bottom: 1px solid #E5E5EA; align-items: flex-start; gap: 15px; }
-            .todo-check { width: 20px; height: 20px; border: 2px solid #007AFF; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #007AFF; margin-top: 2px; flex-shrink: 0; }
-            .todo-task { font-weight: 600; font-size: 15px; }
-            .raw-wrapper { background: #1c1c1e; color: #d1d1d6; padding: 40px; border-radius: 24px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
-            .footer { margin-top: 80px; text-align: center; font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 0.1em; border-top: 1px solid #E5E5EA; padding-top: 20px; }
+
+            .header-group {
+              margin-bottom: 50px;
+            }
+
+            .brand-badge {
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+              background: #007AFF;
+              color: white;
+              padding: 8px 18px;
+              border-radius: 100px;
+              font-size: 12px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.15em;
+              margin-bottom: 24px;
+              box-shadow: 0 4px 12px rgba(0,122,255,0.3);
+            }
+
+            .memo-title {
+              font-family: 'Playfair Display', serif;
+              font-size: 48px;
+              font-weight: 700;
+              margin: 0 0 20px 0;
+              color: #000;
+              line-height: 1.1;
+              letter-spacing: -0.02em;
+            }
+
+            .memo-meta {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+              font-size: 14px;
+              color: #8E8E93;
+              font-weight: 600;
+            }
+
+            .insight-section {
+              background: linear-gradient(135deg, #007AFF, #5856D6);
+              color: white;
+              padding: 40px;
+              border-radius: 32px;
+              margin-bottom: 40px;
+              position: relative;
+              box-shadow: 0 15px 35px rgba(0,122,255,0.25);
+            }
+
+            .insight-label {
+              font-size: 11px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.2em;
+              opacity: 0.7;
+              margin-bottom: 15px;
+              display: block;
+            }
+
+            .insight-text {
+              font-size: 22px;
+              font-weight: 600;
+              line-height: 1.5;
+              margin: 0;
+              white-space: pre-wrap;
+            }
+
+            .blocks-grid {
+              display: flex;
+              flex-direction: column;
+              gap: 24px;
+            }
+
+            .block-card {
+              border-radius: 28px;
+              padding: 35px;
+              border: 1px solid rgba(0,0,0,0.05);
+              position: relative;
+            }
+
+            /* Block Colors */
+            .block-blue { background: #F0F7FF; border-left: 6px solid #007AFF; }
+            .block-emerald { background: #F0FDF4; border-left: 6px solid #10B981; }
+            .block-amber { background: #FFFBEB; border-left: 6px solid #F59E0B; }
+            .block-violet { background: #F5F3FF; border-left: 6px solid #8B5CF6; }
+            .block-rose { background: #FFF1F2; border-left: 6px solid #F43F5E; }
+            .block-slate { background: #F8FAFC; border-left: 6px solid #64748B; }
+
+            .block-header {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+              margin-bottom: 20px;
+            }
+
+            .block-icon-circle {
+              width: 40px;
+              height: 40px;
+              background: white;
+              border-radius: 12px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 20px;
+              box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            }
+
+            .block-title {
+              font-size: 20px;
+              font-weight: 800;
+              color: #1C1C1E;
+              letter-spacing: -0.01em;
+            }
+
+            .block-content {
+              font-size: 16px;
+              color: #2C2C2E;
+              line-height: 1.7;
+            }
+
+            .block-content ul {
+              padding-left: 20px;
+              margin: 0;
+            }
+
+            .block-content li {
+              margin-bottom: 12px;
+            }
+
+            .todo-list-box {
+              margin-top: 25px;
+              background: rgba(255,255,255,0.6);
+              border-radius: 20px;
+              padding: 10px;
+              border: 1px solid rgba(0,0,0,0.03);
+            }
+
+            .todo-row {
+              display: flex;
+              padding: 15px 20px;
+              border-bottom: 1px solid rgba(0,0,0,0.05);
+              align-items: flex-start;
+              gap: 15px;
+            }
+            .todo-row:last-child { border-bottom: none; }
+
+            .todo-check {
+              width: 22px;
+              height: 22px;
+              border: 2.5px solid #007AFF;
+              border-radius: 7px;
+              flex-shrink: 0;
+              margin-top: 2px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+              color: #007AFF;
+              background: white;
+            }
+
+            .todo-text-main {
+              font-size: 16px;
+              font-weight: 700;
+              color: #1C1C1E;
+            }
+
+            .raw-dark-box {
+              background: #1C1C1E;
+              color: #D1D1D6;
+              padding: 40px;
+              border-radius: 32px;
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 13px;
+              line-height: 1.8;
+              white-space: pre-wrap;
+              margin-top: 60px;
+              position: relative;
+            }
+
+            .raw-label {
+              position: absolute;
+              top: -12px;
+              left: 40px;
+              background: #3A3A3C;
+              color: white;
+              padding: 4px 12px;
+              border-radius: 6px;
+              font-size: 10px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.1em;
+            }
+
+            .footer-section {
+              margin-top: 80px;
+              text-align: center;
+              padding-top: 40px;
+              border-top: 2px solid #F2F2F7;
+            }
+
+            .footer-logo-text {
+              font-size: 18px;
+              font-weight: 900;
+              color: #007AFF;
+              letter-spacing: 0.05em;
+              margin-bottom: 6px;
+            }
+
+            .footer-tagline {
+              font-size: 11px;
+              color: #8E8E93;
+              text-transform: uppercase;
+              letter-spacing: 0.2em;
+              font-weight: 600;
+            }
           </style>
           
-          <div class="report-header">
-            <span class="type-label">${memo.type}</span>
-            <h1>${memo.title}</h1>
-            <div class="meta-bar">
-              <span>日期：${dateStr}</span>
-              <span>文档编号：SM-${memo.id.slice(-6).toUpperCase()}</span>
-            </div>
-          </div>
-
-          ${memo.imageUrl ? `<div style="margin-bottom: 50px; border-radius: 24px; overflow: hidden;"><img src="${memo.imageUrl}" style="width: 100%; display: block;" /></div>` : ''}
-
-          ${memo.content ? `
-            <div class="section">
-              <div class="section-header">
-                <span class="section-num">01</span>
-                <span class="section-title">AI 核心总结</span>
-                <div class="section-line"></div>
+          <div class="card-main">
+            <div class="header-group">
+              <div class="brand-badge">
+                <span>✨</span>
+                <span>${memo.type}</span>
               </div>
-              <div class="summary-box">
-                <div class="summary-text">${memo.content}</div>
+              <h1 class="memo-title">${memo.title}</h1>
+              <div class="memo-meta">
+                <span>📅 ${dateStr}</span>
+                <span style="opacity: 0.2;">•</span>
+                <span>DOC ID: SM-${memo.id.slice(-6).toUpperCase()}</span>
               </div>
             </div>
-          ` : ''}
 
-          ${memo.blocks ? `
-            <div class="section">
-              <div class="section-header">
-                <span class="section-num">02</span>
-                <span class="section-title">结构化深度分析</span>
-                <div class="section-line"></div>
+            ${memo.imageUrl ? `
+              <div style="margin-bottom: 50px; border-radius: 32px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
+                <img src="${memo.imageUrl}" style="width: 100%; display: block;" />
               </div>
-              <div class="blocks-container">
+            ` : ''}
+
+            ${memo.content ? `
+              <div class="insight-section">
+                <span class="insight-label">AI 核心洞察</span>
+                <p class="insight-text">${memo.content}</p>
+              </div>
+            ` : ''}
+
+            ${memo.blocks ? `
+              <div class="blocks-grid">
                 ${memo.blocks.map(block => {
                   const icon = block.type === 'todo' ? '✅' : 
                                block.type === 'highlight' ? '💡' :
                                block.type === 'quote' ? '💬' :
                                block.type === 'step' ? '🔢' :
                                block.type === 'bento' ? '🍱' : '📄';
+                  const colorClass = 'block-' + (block.color || 'slate');
                   return `
-                    <div class="block-card">
-                      <div class="block-head">
-                        <div class="block-icon">${icon}</div>
+                    <div class="block-card ${colorClass}">
+                      <div class="block-header">
+                        <div class="block-icon-circle">${icon}</div>
                         <div class="block-title">${block.title || block.type.toUpperCase()}</div>
                       </div>
-                      <div class="block-body">
+                      <div class="block-content">
                         ${Array.isArray(block.content) ? `
                           <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
                         ` : `<p>${block.content}</p>`}
                         
                         ${block.todoItems ? `
-                          <div class="todo-box">
+                          <div class="todo-list-box">
                             ${block.todoItems.map(item => `
                               <div class="todo-row">
                                 <div class="todo-check">${item.completed ? '✓' : ''}</div>
-                                <div class="todo-content">
-                                  <div class="todo-task">${item.task}</div>
-                                </div>
+                                <div class="todo-text-main">${item.task}</div>
                               </div>
                             `).join('')}
                           </div>
@@ -1115,34 +1307,31 @@ export default function App() {
                   `;
                 }).join('')}
               </div>
-            </div>
-          ` : ''}
+            ` : ''}
 
-          ${memo.rawText ? `
-            <div class="section">
-              <div class="section-header">
-                <span class="section-num">03</span>
-                <span class="section-title">原始记录存档</span>
-                <div class="section-line"></div>
+            ${memo.rawText ? `
+              <div class="raw-dark-box">
+                <span class="raw-label">原始记录存档</span>
+                ${memo.rawText}
               </div>
-              <div class="raw-wrapper">${memo.rawText}</div>
-            </div>
-          ` : ''}
+            ` : ''}
 
-          <div class="footer">
-            Smart Memo AI Assistant • Generated with Intelligence
+            <div class="footer-section">
+              <div class="footer-logo-text">SMART MEMO AI</div>
+              <div class="footer-tagline">Intelligent Capture • Structured Thinking</div>
+            </div>
           </div>
         </div>
       `;
 
       // Wait for fonts and images to load
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(container, {
-        scale: 2, // Higher scale for better quality
+        scale: 3, 
         useCORS: true,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#F2F2F7',
         logging: false,
         allowTaint: true,
       });
