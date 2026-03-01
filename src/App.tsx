@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, FileAudio } from 'lucide-react';
+import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -563,7 +563,6 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const audioFileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -575,18 +574,6 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
         const compressed = await compressImage(reader.result as string);
         setImage(compressed);
       };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 20 * 1024 * 1024) {
-        alert("音频文件过大（建议不超过20MB），AI 分析可能会失败。");
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => setAudio(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -805,20 +792,6 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
             </div>
             <span className="text-[10px] text-gray-500 font-medium">{isRecording ? "正在录音 (点击停止)" : "点击录音"}</span>
           </button>
-
-          <button onClick={() => audioFileInputRef.current?.click()} className="flex flex-col items-center gap-1 group relative">
-            <div className={cn(
-              "w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm border border-black/5 group-active:bg-gray-50",
-              type === '会议纪要' && "ring-2 ring-[#007AFF] ring-offset-2"
-            )}>
-              <FileAudio className="w-6 h-6 text-[#007AFF]" />
-            </div>
-            <span className="text-[10px] text-gray-500 font-medium">上传音频</span>
-            <input type="file" ref={audioFileInputRef} onChange={handleAudioUpload} accept="audio/*" className="hidden" />
-            {type === '会议纪要' && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#007AFF] rounded-full border-2 border-white animate-bounce" />
-            )}
-          </button>
         </div>
       </div>
     </motion.div>
@@ -1018,103 +991,6 @@ export default function App() {
   useEffect(() => {
     getAllMemos().then(setMemos).catch(console.error);
   }, []);
-
-  const formatMemoForExport = (memo: Memo): string => {
-    const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN');
-    let text = `🗓 [${memo.type}] ${memo.title}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `⏰ 生成时间: ${dateStr}\n\n`;
-
-    if (memo.content) {
-      text += `💡 AI 核心总结\n`;
-      text += `────────────────────\n`;
-      text += `${memo.content}\n\n`;
-    }
-
-    if (memo.blocks) {
-      memo.blocks.forEach(block => {
-        const icon = block.type === 'todo' ? '✅' : 
-                     block.type === 'highlight' ? '🟦' :
-                     block.type === 'quote' ? '💬' :
-                     block.type === 'step' ? '🔢' :
-                     block.type === 'bento' ? '🍱' : '📄';
-        
-        text += `${icon} ${block.title || block.type.toUpperCase()}\n`;
-        text += `────────────────────\n`;
-        
-        if (Array.isArray(block.content)) {
-          block.content.forEach(line => text += `• ${line}\n`);
-        } else {
-          text += `${block.content}\n`;
-        }
-
-        if (block.todoItems) {
-          block.todoItems.forEach(item => {
-            text += `${item.completed ? '☑️' : '⬜️'} ${item.task}\n`;
-            if (item.time) text += `   ⏰ ${item.time}\n`;
-            if (item.notes) text += `   📝 ${item.notes}\n`;
-          });
-        }
-        text += `\n`;
-      });
-    }
-
-    if (memo.rawText) {
-      text += `━━━━━━━━━━━━━━━━━━━━\n`;
-      text += `📄 原始输入记录\n`;
-      text += `${memo.rawText}\n`;
-    }
-
-    return text;
-  };
-
-  const handleExportToNotes = async (memo: Memo) => {
-    const formattedText = formatMemoForExport(memo);
-    const files: File[] = [];
-
-    try {
-      // Convert base64 assets to Files
-      if (memo.imageUrl) {
-        const res = await fetch(memo.imageUrl);
-        const blob = await res.blob();
-        files.push(new File([blob], `image_${memo.id}.jpg`, { type: 'image/jpeg' }));
-      }
-      if (memo.audioUrl) {
-        const res = await fetch(memo.audioUrl);
-        const blob = await res.blob();
-        files.push(new File([blob], `audio_${memo.id}.wav`, { type: 'audio/wav' }));
-      }
-
-      if (navigator.share) {
-        const shareData: ShareData = {
-          title: memo.title,
-          text: formattedText,
-          files: files.length > 0 ? files : undefined
-        };
-        
-        // Check if files can be shared
-        if (files.length > 0 && navigator.canShare && !navigator.canShare({ files })) {
-          // If files can't be shared, share text only
-          await navigator.share({ title: memo.title, text: formattedText });
-        } else {
-          await navigator.share(shareData);
-        }
-      } else {
-        // Fallback: Copy to clipboard
-        await navigator.clipboard.writeText(formattedText);
-        alert('已复制精美排版文本到剪贴板（您的浏览器不支持直接导出到备忘录）');
-      }
-    } catch (err) {
-      console.error('Export error:', err);
-      // Fallback to text only share if file share fails
-      try {
-        await navigator.share({ title: memo.title, text: formattedText });
-      } catch (e) {
-        alert('导出失败，请尝试手动复制内容。');
-      }
-    }
-    setIsShareSheetOpen(false);
-  };
 
   const handleShareAsImage = async (memo: Memo) => {
     if (!printRef.current) return;
@@ -1527,13 +1403,6 @@ export default function App() {
               <h3 className="text-center text-sm font-semibold text-gray-500 mb-6">分享备忘录</h3>
               
               <div className="space-y-3">
-                <button
-                  onClick={() => handleExportToNotes(selectedMemo)}
-                  className="w-full bg-[#007AFF] py-4 rounded-2xl font-bold text-white shadow-lg shadow-[#007AFF]/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
-                >
-                  <Share className="w-5 h-5" />
-                  导出到 iPhone 备忘录
-                </button>
                 <button
                   onClick={() => handleShareAsImage(selectedMemo)}
                   className="w-full bg-white py-4 rounded-2xl font-semibold text-[#007AFF] shadow-sm active:bg-gray-50 transition-colors flex items-center justify-center gap-2"
