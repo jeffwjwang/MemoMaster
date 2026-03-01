@@ -289,7 +289,9 @@ async function analyzeMemo(
       systemInstruction += `\n重点：将任务严格按类型归类，每类使用一个 todo 块。每个任务项必须包含时间、内容和要点。`;
       break;
     case '英语拾贝':
-      systemInstruction += `\n重点：使用 highlight 块展示分析出来的中文核心短语及其英文常用地道的书面表达短语及口语表达短语，使用 bento 块展示例句和语境。`;
+      systemInstruction += `\n重点：使用 highlight 块展示分析出来的中文核心短语及其英文常用地道的书面表达短语及口语表达短语，使用 bento 块展示例句和语境。
+      1.提供不超过3个对应这个中文核心短语对应的英语书面表达短语及口语表达短语
+      2.提供这些英文短语的应用注意点，并给出对应的例句`;
       break;
     case '好文收藏':
       systemInstruction += `\n重点：
