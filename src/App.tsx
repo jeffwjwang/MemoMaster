@@ -855,9 +855,14 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
 
 // --- Main App ---
 
-function ChatDialog({ memos, onClose }: { memos: Memo[]; onClose: () => void }) {
+function ChatDialog({ memos, initialMemo, onClose }: { memos: Memo[]; initialMemo?: Memo | null; onClose: () => void }) {
   const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([
-    { role: 'ai', text: '你好！我是你的 Gemini 笔记助手。你可以问我关于备忘录的任何问题，比如“帮我总结一下最近的会议”或“我上周收藏了哪些关于 AI 的文章？”' }
+    { 
+      role: 'ai', 
+      text: initialMemo 
+        ? `你好！我已经准备好和你讨论关于《${initialMemo.title}》的内容了。你可以问我关于这条笔记的任何细节。` 
+        : '你好！我是你的 Gemini 笔记助手。你可以问我关于备忘录的任何问题，比如“帮我总结一下最近的会议”或“我上周收藏了哪些关于 AI 的文章？”' 
+    }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -887,62 +892,79 @@ function ChatDialog({ memos, onClose }: { memos: Memo[]; onClose: () => void }) 
       const ai = new GoogleGenAI({ apiKey });
       const model = "gemini-3-flash-preview";
 
-      // --- RAG Logic: Filter relevant memos ---
-      const keywords = userMsg.toLowerCase().split(/[\s,，。！!？?]+/).filter(k => k.length >= 1);
+      let systemInstruction = "";
       
-      const scoredMemos = memos.map(m => {
-        let score = 0;
-        const searchText = (m.title + " " + (m.rawText || m.content) + " " + m.type).toLowerCase();
-        
-        // Keyword matching score
-        keywords.forEach(kw => {
-          if (searchText.includes(kw)) score += 10;
-          if (m.title.toLowerCase().includes(kw)) score += 5;
-        });
-        
-        // Recency boost (memos from last 24h get a boost)
-        const hoursOld = (Date.now() - m.timestamp) / (1000 * 60 * 60);
-        if (hoursOld < 24) score += 5;
-        if (hoursOld < 1) score += 5; // Very recent
-
-        return { m, score, timestamp: m.timestamp };
-      });
-
-      // Pick top 10 by score + top 5 by recency (to ensure context of what user just did)
-      const topByScore = [...scoredMemos].sort((a, b) => b.score - a.score).slice(0, 10);
-      const topByRecency = [...scoredMemos].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
-      
-      // Merge and deduplicate
-      const relevantMemos = Array.from(new Set([...topByScore, ...topByRecency].map(item => item.m)));
-
-      // Prepare pruned context
-      const memosContext = relevantMemos.map(m => {
-        let content = m.rawText || m.content;
-        if (m.blocks) {
-          content += "\n结构化内容: " + m.blocks.map(b => {
+      if (initialMemo) {
+        // Focused mode for a single memo
+        let content = initialMemo.rawText || initialMemo.content;
+        if (initialMemo.blocks) {
+          content += "\n结构化内容: " + initialMemo.blocks.map(b => {
             const blockContent = Array.isArray(b.content) ? b.content.join(', ') : b.content;
             return `[${b.type}] ${b.title || ''}: ${blockContent}`;
           }).join('; ');
         }
-        return `ID: ${m.id}\n类型: ${m.type}\n标题: ${m.title}\n日期: ${new Date(m.timestamp).toLocaleString()}\n内容: ${content}`;
-      }).join('\n---\n');
+        
+        systemInstruction = `你是一个智能笔记助手。你现在的任务是协助用户深入理解当前这条备忘录。
+        当前备忘录内容:
+        标题: ${initialMemo.title}
+        日期: ${new Date(initialMemo.timestamp).toLocaleString()}
+        内容: ${content}
+        
+        你的任务：
+        1. 基于上述内容回答用户的任何问题。
+        2. 帮助用户挖掘内容中的深层含义或提供延伸建议。
+        3. 如果用户问到了其他备忘录的内容，请礼貌地告知你目前正专注于这一条笔记。
+        
+        回复要求：
+        - 语气友好、专业、简洁。
+        - 使用 Markdown 格式美化你的回复。`;
+      } else {
+        // Global RAG Logic: Filter relevant memos
+        const keywords = userMsg.toLowerCase().split(/[\s,，。！!？?]+/).filter(k => k.length >= 1);
+        
+        const scoredMemos = memos.map(m => {
+          let score = 0;
+          const searchText = (m.title + " " + (m.rawText || m.content) + " " + m.type).toLowerCase();
+          
+          keywords.forEach(kw => {
+            if (searchText.includes(kw)) score += 10;
+            if (m.title.toLowerCase().includes(kw)) score += 5;
+          });
+          
+          const hoursOld = (Date.now() - m.timestamp) / (1000 * 60 * 60);
+          if (hoursOld < 24) score += 5;
+          if (hoursOld < 1) score += 5;
 
-      const systemInstruction = `你是一个智能笔记助手。你拥有用户备忘录库的检索权限。
-      当前时间: ${new Date().toLocaleString()}
-      
-      【检索到的相关备忘录数据】(已根据相关性和时间为你筛选):
-      ${memosContext}
-      
-      你的任务：
-      1. 回答用户关于备忘录的问题。
-      2. 帮用户寻找特定的信息或备忘录。
-      3. 进行跨备忘录的深度分析、总结或对比。
-      
-      回复要求：
-      - 语气友好、专业、简洁。
-      - 如果检索到的信息中没有相关内容，请诚实告知，并建议用户尝试提供更多关键词。
-      - 使用 Markdown 格式美化你的回复。
-      - 如果提到了具体的备忘录，请指明其标题。`;
+          return { m, score, timestamp: m.timestamp };
+        });
+
+        const topByScore = [...scoredMemos].sort((a, b) => b.score - a.score).slice(0, 10);
+        const topByRecency = [...scoredMemos].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
+        const relevantMemos = Array.from(new Set([...topByScore, ...topByRecency].map(item => item.m)));
+
+        const memosContext = relevantMemos.map(m => {
+          let content = m.rawText || m.content;
+          if (m.blocks) {
+            content += "\n结构化内容: " + m.blocks.map(b => {
+              const blockContent = Array.isArray(b.content) ? b.content.join(', ') : b.content;
+              return `[${b.type}] ${b.title || ''}: ${blockContent}`;
+            }).join('; ');
+          }
+          return `ID: ${m.id}\n类型: ${m.type}\n标题: ${m.title}\n日期: ${new Date(m.timestamp).toLocaleString()}\n内容: ${content}`;
+        }).join('\n---\n');
+
+        systemInstruction = `你是一个智能笔记助手。你拥有用户备忘录库的检索权限。
+        当前时间: ${new Date().toLocaleString()}
+        
+        【检索到的相关备忘录数据】:
+        ${memosContext}
+        
+        你的任务：回答用户关于备忘录的问题，寻找特定信息，进行跨备忘录分析。
+        
+        回复要求：
+        - 语气友好、专业、简洁。
+        - 使用 Markdown 格式美化你的回复。`;
+      }
 
       setChatProgress('正在生成回复...');
       const response = await ai.models.generateContent({
@@ -1037,6 +1059,7 @@ export default function App() {
   const [filterType, setFilterType] = useState<MemoType | '全部'>('全部');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMemo, setChatMemo] = useState<Memo | null>(null);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
   const [isEditing, setIsEditing] = useState(false);
@@ -1473,413 +1496,13 @@ export default function App() {
     }
   };
 
-  const handlePrintToPDF = (memo: Memo) => {
-    setIsShareSheetOpen(false);
-    
-    const iframe = document.createElement('iframe');
-    // Use absolute positioning to move it off-screen instead of visibility:hidden
-    // which can cause blank prints in some browsers.
-    iframe.style.position = 'absolute';
-    iframe.style.top = '-10000px';
-    iframe.style.left = '0';
-    iframe.style.width = '1024px'; 
-    iframe.style.height = '1000px';
-    iframe.style.zIndex = '-1';
-    iframe.style.opacity = '0.01';
-    iframe.style.pointerEvents = 'none';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document;
-    if (!doc) return;
-
-    const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>[${memo.type}] ${memo.title}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
-        <style>
-          :root {
-            --bg: #FDFDFB;
-            --ink: #1A1A1A;
-            --muted: #AEAEB2;
-            --line: rgba(0,0,0,0.05);
-            --accent: #1A1A1A;
-          }
-          
-          @media print {
-            @page { 
-              margin: 2cm; 
-              size: A4;
-            }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          }
-
-          body {
-            font-family: 'Inter', -apple-system, sans-serif;
-            line-height: 1.6;
-            color: var(--ink);
-            padding: 0;
-            margin: 0;
-            background: white;
-          }
-
-          .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px;
-          }
-
-          /* Header Section */
-          .report-header {
-            text-align: center;
-            margin-bottom: 80px;
-            padding-bottom: 40px;
-            border-bottom: 1px solid var(--line);
-          }
-
-          .type-badge {
-            display: inline-block;
-            background: var(--ink);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 100px;
-            font-size: 9px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.2em;
-            margin-bottom: 20px;
-          }
-
-          h1 {
-            font-family: 'Playfair Display', serif;
-            font-size: 42px;
-            font-weight: 700;
-            margin: 0 0 20px 0;
-            color: var(--ink);
-            line-height: 1.1;
-            letter-spacing: -0.02em;
-          }
-
-          .meta-bar {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            font-size: 11px;
-            color: var(--muted);
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-          }
-
-          /* Insight Section */
-          .insight-section {
-            background: #F8F8F5;
-            padding: 50px;
-            border-radius: 32px;
-            margin-bottom: 60px;
-            position: relative;
-            border-left: 4px solid var(--ink);
-          }
-
-          .insight-label {
-            font-size: 9px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.3em;
-            color: var(--muted);
-            margin-bottom: 20px;
-            display: block;
-          }
-
-          .insight-text {
-            font-family: 'Playfair Display', serif;
-            font-style: italic;
-            font-size: 22px;
-            font-weight: 500;
-            line-height: 1.5;
-            color: var(--ink);
-            margin: 0;
-          }
-
-          /* Blocks */
-          .blocks-container {
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
-          }
-
-          .block-card {
-            position: relative;
-            padding-left: 30px;
-            page-break-inside: avoid;
-          }
-
-          .block-line {
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 1px;
-            background: var(--line);
-          }
-
-          .block-title {
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.2em;
-            color: var(--muted);
-            margin-bottom: 15px;
-          }
-
-          .block-content {
-            font-size: 14px;
-            color: #333;
-            line-height: 1.8;
-          }
-
-          .block-content ul {
-            padding-left: 20px;
-            margin: 0;
-            list-style: none;
-          }
-
-          .block-content li {
-            margin-bottom: 12px;
-            position: relative;
-          }
-
-          .block-content li::before {
-            content: "";
-            position: absolute;
-            left: -20px;
-            top: 10px;
-            width: 4px;
-            height: 4px;
-            border-radius: 50%;
-            background: rgba(0,0,0,0.1);
-          }
-
-          /* Todo List */
-          .todo-box {
-            margin-top: 20px;
-            border: 1px solid var(--line);
-            border-radius: 16px;
-            overflow: hidden;
-          }
-
-          .todo-row {
-            display: flex;
-            padding: 12px 20px;
-            border-bottom: 1px solid var(--line);
-            align-items: center;
-            gap: 15px;
-          }
-          .todo-row:last-child { border-bottom: none; }
-
-          .todo-check {
-            width: 16px;
-            height: 16px;
-            border: 1px solid var(--ink);
-            border-radius: 4px;
-            flex-shrink: 0;
-          }
-          .todo-check.checked {
-            background: var(--ink);
-          }
-
-          .todo-text {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--ink);
-          }
-
-          /* Raw Text */
-          .raw-section {
-            margin-top: 100px;
-            padding-top: 50px;
-            border-top: 1px solid var(--line);
-            page-break-before: auto;
-          }
-
-          .raw-header {
-            font-size: 9px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.3em;
-            color: var(--muted);
-            margin-bottom: 20px;
-            display: block;
-            text-align: center;
-          }
-
-          .raw-content {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
-            color: #8E8E93;
-            line-height: 1.8;
-            white-space: pre-wrap;
-            background: #F8F8F5;
-            padding: 30px;
-            border-radius: 20px;
-          }
-
-          /* Image */
-          .image-container {
-            margin-bottom: 60px;
-            border-radius: 32px;
-            overflow: hidden;
-            border: 1px solid var(--line);
-          }
-
-          .image-container img {
-            width: 100%;
-            display: block;
-          }
-
-          .footer {
-            margin-top: 100px;
-            text-align: center;
-            font-size: 9px;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.4em;
-            font-weight: 700;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <header class="report-header">
-            <div class="type-badge">${memo.type}</div>
-            <h1>${memo.title}</h1>
-            <div class="meta-bar">
-              <span>${dateStr}</span>
-              <span>SM-${memo.id.slice(-6).toUpperCase()}</span>
-            </div>
-          </header>
-
-          ${memo.imageUrl ? `
-            <div class="image-container">
-              <img src="${memo.imageUrl}" />
-            </div>
-          ` : ''}
-
-          ${memo.content ? `
-            <div class="insight-section">
-              <span class="insight-label">AI Core Insight</span>
-              <p class="insight-text">${memo.content}</p>
-            </div>
-          ` : ''}
-
-          <div class="blocks-container">
-            ${memo.blocks ? memo.blocks.map(block => `
-              <div class="block-card">
-                <div class="block-line"></div>
-                <div class="block-title">${block.title || block.type.toUpperCase()}</div>
-                <div class="block-content">
-                  ${block.type === 'bento' && Array.isArray(block.content) ? `
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
-                      ${block.content.map(item => `
-                        <div style="padding: 12px; background: #F8F8F5; border-radius: 12px; font-size: 12px; font-weight: 600; border: 1px solid rgba(0,0,0,0.03);">${item}</div>
-                      `).join('')}
-                    </div>
-                  ` : block.type === 'list' && Array.isArray(block.content) ? `
-                    <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
-                  ` : Array.isArray(block.content) ? `
-                    ${block.content.map(p => `<p style="margin-bottom: 12px;">${p}</p>`).join('')}
-                  ` : `<p>${block.content}</p>`}
-                  
-                  ${block.todoItems ? `
-                    <div class="todo-box">
-                      ${block.todoItems.map(item => `
-                        <div class="todo-row">
-                          <div class="todo-check ${item.completed ? 'checked' : ''}"></div>
-                          <div class="todo-text">${item.task}</div>
-                        </div>
-                      `).join('')}
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
-            `).join('') : `<p>${memo.content}</p>`}
-          </div>
-
-          ${memo.rawText ? `
-            <div class="raw-section">
-              <span class="raw-header">Raw Input Archive</span>
-              <div class="raw-content">${memo.rawText}</div>
-            </div>
-          ` : ''}
-
-          <footer class="footer">
-            Generated by Smart Memo • AI Powered Knowledge Management
-          </footer>
-        </div>
-
-        <script>
-          let isPrinting = false;
-          async function prepareAndPrint() {
-            if (isPrinting) return;
-            isPrinting = true;
-
-            // 1. Wait for all images to load
-            const images = Array.from(document.querySelectorAll('img'));
-            const imagePromises = images.map(img => {
-              if (img.complete) return Promise.resolve();
-              return new Promise(resolve => {
-                img.onload = resolve;
-                img.onerror = resolve;
-              });
-            });
-            
-            // 2. Wait for fonts to be ready
-            const fontPromise = document.fonts ? document.fonts.ready : Promise.resolve();
-            
-            try {
-              await Promise.all([...imagePromises, fontPromise]);
-            } catch (e) {
-              console.error("Resource loading failed", e);
-            }
-
-            // 3. Final layout stabilization delay
-            setTimeout(() => {
-              window.focus();
-              window.print();
-              // Remove iframe after print dialog is closed
-              setTimeout(() => {
-                if (window.frameElement) {
-                  window.frameElement.remove();
-                }
-              }, 1000);
-            }, 1000);
-          }
-
-          // Trigger print when everything is loaded
-          window.onload = prepareAndPrint;
-          // Fallback in case onload doesn't fire as expected with doc.write
-          setTimeout(prepareAndPrint, 3000);
-        </script>
-      </body>
-      </html>
-    `;
-
-    doc.open();
-    doc.write(html);
-    doc.close();
-  };
-
   const handleShare = async (memo: Memo) => {
     setIsShareSheetOpen(true);
+  };
+
+  const handleMemoChat = (memo: Memo) => {
+    setChatMemo(memo);
+    setIsChatOpen(true);
   };
 
   const handleToggleTodo = async (memoId: string, blockIdx: number, itemIdx: number) => {
@@ -2365,6 +1988,18 @@ export default function App() {
                 )}
               </div>
             </div>
+            {!isEditing && (
+              <div className="ios-blur sticky bottom-0 px-6 py-4 flex justify-between items-center no-print border-t border-black/5">
+                <p className="text-xs text-gray-400 font-medium">针对此备忘录提问</p>
+                <button 
+                  onClick={() => handleMemoChat(selectedMemo)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-black/5 rounded-full shadow-sm text-[#007AFF] text-xs font-bold ios-button"
+                >
+                  <div className="w-2 h-2 rounded-full bg-[#007AFF] animate-pulse" />
+                  问问这条笔记
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -2399,13 +2034,6 @@ export default function App() {
                   分享为长图
                 </button>
                 <button
-                  onClick={() => handlePrintToPDF(selectedMemo)}
-                  className="w-full bg-white py-4 rounded-2xl font-semibold text-[#007AFF] shadow-sm active:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Share className="w-5 h-5" />
-                  打印 / 另存为 PDF
-                </button>
-                <button
                   onClick={() => setIsShareSheetOpen(false)}
                   className="w-full bg-white py-4 rounded-2xl font-semibold text-gray-900 shadow-sm active:bg-gray-50 transition-colors mt-4"
                 >
@@ -2418,7 +2046,16 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {isChatOpen && <ChatDialog memos={memos} onClose={() => setIsChatOpen(false)} />}
+        {isChatOpen && (
+          <ChatDialog 
+            memos={memos} 
+            initialMemo={chatMemo} 
+            onClose={() => {
+              setIsChatOpen(false);
+              setChatMemo(null);
+            }} 
+          />
+        )}
       </AnimatePresence>
 
       <AnimatePresence>
