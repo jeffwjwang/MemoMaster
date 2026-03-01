@@ -125,6 +125,7 @@ async function analyzeMemo(
   text?: string,
   imageB64?: string,
   audioB64?: string,
+  retryCount = 0
 ) {
   const apiKey = getApiKey();
   if (!apiKey) {
@@ -203,51 +204,62 @@ async function analyzeMemo(
     parts.push({ inlineData: { mimeType: mimeMatch ? mimeMatch[1] : "audio/wav", data: audioB64.split(',')[1] || audioB64 } });
   }
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: { parts },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          summary: { type: Type.STRING, description: "一句话总结" },
-          blocks: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list", "todo", "quote"] },
-                title: { type: Type.STRING },
-                content: { 
-                  type: Type.ARRAY, 
-                  items: { type: Type.STRING },
-                  description: "内容数组"
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model,
+      contents: { parts },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            summary: { type: Type.STRING, description: "一句话总结" },
+            blocks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list", "todo", "quote"] },
+                  title: { type: Type.STRING },
+                  content: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING },
+                    description: "内容数组"
+                  },
+                  todoItems: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        task: { type: Type.STRING },
+                        time: { type: Type.STRING },
+                        notes: { type: Type.STRING },
+                        completed: { type: Type.BOOLEAN }
+                      },
+                      required: ["task", "completed"]
+                    }
+                  },
+                  color: { type: Type.STRING, enum: ["blue", "emerald", "amber", "violet", "rose", "slate"] }
                 },
-                todoItems: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      task: { type: Type.STRING },
-                      time: { type: Type.STRING },
-                      notes: { type: Type.STRING },
-                      completed: { type: Type.BOOLEAN }
-                    },
-                    required: ["task", "completed"]
-                  }
-                },
-                color: { type: Type.STRING, enum: ["blue", "emerald", "amber", "violet", "rose", "slate"] }
-              },
-              required: ["type"]
+                required: ["type"]
+              }
             }
-          }
-        },
-        required: ["title", "blocks"]
+          },
+          required: ["title", "blocks"]
+        }
       }
+    });
+  } catch (error) {
+    if (retryCount < 1) {
+      console.warn(`AI Analysis failed, retrying... (Attempt ${retryCount + 1})`, error);
+      // Wait a bit before retrying
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return analyzeMemo(type, text, imageB64, audioB64, retryCount + 1);
     }
-  });
+    throw error;
+  }
 
   let rawText = response.text;
   // Strip markdown code blocks if present
@@ -473,9 +485,25 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/ogg';
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 
+                       MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 
+                       'audio/ogg';
+      
+      // Use a lower bitrate (32kbps) to ensure long recordings (e.g. 20-30 mins) 
+      // don't exceed API payload limits (approx 20MB).
+      const mediaRecorder = new MediaRecorder(stream, { 
+        mimeType,
+        audioBitsPerSecond: 32000 
+      });
+      
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (event) => {
@@ -483,6 +511,12 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
       };
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        
+        // Check size: if > 15MB, warn the user
+        if (audioBlob.size > 15 * 1024 * 1024) {
+          alert("录音文件过大（超过15MB），AI 分析可能会失败。建议缩短录音时长。");
+        }
+
         const reader = new FileReader();
         reader.onloadend = () => setAudio(reader.result as string);
         reader.readAsDataURL(audioBlob);
@@ -540,10 +574,13 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
       });
       onClose();
     } catch (error: any) {
+      console.error("AI Analysis Error:", error);
       if (error.message === 'API_KEY_MISSING') {
         alert('请先在设置中配置 Gemini API Key');
+      } else if (error.message?.includes('413') || error.message?.includes('too large')) {
+        alert('内容过大，请尝试缩短录音时长或减少图片数量');
       } else {
-        alert('分析失败，请稍后重试');
+        alert('分析失败，可能是因为录音过长导致超时。请尝试再次点击“AI 整理”或缩短录音。');
       }
     } finally {
       setIsAnalyzing(false);
