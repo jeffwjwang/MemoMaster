@@ -270,7 +270,7 @@ async function analyzeMemo(
   // ... (rest of the system instruction logic remains similar but adapted for blocks)
   switch (type) {
     case '灵感记录':
-      systemInstruction += `\n重点：使用 highlight 块展示核心灵感，使用 bento 块展示应用场景。`;
+      systemInstruction += `\n重点：使用 highlight 块展示核心灵感及用户想到这个灵感的意图，使用 bento 块展示应用场景。使用text给出这个灵感的落地的可行性及具体行动指南`;
       break;
     case '会议纪要':
       systemInstruction += `\n**【会议纪要专项指令：深度捕获与全量还原】**
@@ -289,7 +289,7 @@ async function analyzeMemo(
       systemInstruction += `\n重点：将任务严格按类型归类，每类使用一个 todo 块。每个任务项必须包含时间、内容和要点。`;
       break;
     case '英语拾贝':
-      systemInstruction += `\n重点：使用 highlight 块展示核心短语，使用 bento 块展示例句和语境。`;
+      systemInstruction += `\n重点：使用 highlight 块展示分析出来的中文核心短语及其英文常用地道的书面表达短语及口语表达短语，使用 bento 块展示例句和语境。`;
       break;
     case '好文收藏':
       systemInstruction += `\n重点：
