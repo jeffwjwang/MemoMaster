@@ -1036,7 +1036,6 @@ export default function App() {
   const handlePrintToPDF = (memo: Memo) => {
     setIsShareSheetOpen(false);
     
-    // Create a hidden iframe for printing
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
@@ -1049,176 +1048,407 @@ export default function App() {
     const doc = iframe.contentWindow?.document;
     if (!doc) return;
 
-    const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN');
+    const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
     
-    // Construct the print-friendly HTML
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>[${memo.type}] ${memo.title}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
         <style>
+          :root {
+            --primary: #007AFF;
+            --primary-dark: #0056b3;
+            --primary-light: #f0f7ff;
+            --accent: #5856D6;
+            --bg-soft: #F8F9FA;
+            --text-main: #1C1C1E;
+            --text-muted: #636366;
+            --text-light: #8E8E93;
+            --border: #E5E5EA;
+            --ink: #141414;
+          }
+          
+          @media print {
+            @page { 
+              margin: 1.5cm; 
+              size: A4;
+            }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+
           body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             line-height: 1.6;
-            color: #1a1a1a;
-            padding: 40px;
-            max-width: 800px;
-            margin: 0 auto;
+            color: var(--text-main);
+            padding: 0;
+            margin: 0;
             background: white;
           }
-          .header {
-            border-bottom: 2px solid #007AFF;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
-          }
-          .type-tag {
-            display: inline-block;
-            background: #007AFF;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 10px;
-          }
-          h1 {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 700;
-            color: #000;
-          }
-          .meta {
-            font-size: 12px;
-            color: #8E8E93;
-            margin-top: 8px;
-          }
-          .content-section {
-            margin-bottom: 40px;
-          }
-          .section-title {
-            font-size: 14px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #8E8E93;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #E5E5EA;
-            padding-bottom: 5px;
-          }
-          .summary {
-            font-size: 16px;
-            white-space: pre-wrap;
-          }
-          .block {
-            margin-bottom: 25px;
-            page-break-inside: avoid;
-          }
-          .block-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: #007AFF;
-          }
-          .block-content {
-            font-size: 15px;
-          }
-          .todo-item {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 8px;
-          }
-          .todo-checkbox {
-            margin-right: 10px;
-            margin-top: 5px;
-          }
-          .todo-text {
-            flex: 1;
-          }
-          .todo-meta {
-            font-size: 12px;
-            color: #8E8E93;
-            margin-top: 2px;
-          }
-          .raw-text {
-            font-size: 14px;
-            color: #636366;
-            font-style: italic;
-            background: #F2F2F7;
+
+          .container {
+            max-width: 800px;
+            margin: 0 auto;
             padding: 20px;
-            border-radius: 12px;
-            white-space: pre-wrap;
           }
-          img {
-            max-width: 100%;
-            border-radius: 12px;
-            margin: 20px 0;
+
+          /* Header Section */
+          .report-header {
+            border-left: 8px solid var(--primary);
+            padding: 20px 0 20px 30px;
+            margin-bottom: 50px;
+            background: linear-gradient(to right, var(--primary-light), transparent);
+          }
+
+          .type-label {
+            font-family: 'Inter';
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--primary);
+            margin-bottom: 8px;
             display: block;
           }
-          @media print {
-            body { padding: 0; }
-            @page { margin: 2cm; }
+
+          h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 38px;
+            font-weight: 700;
+            margin: 0;
+            color: var(--ink);
+            line-height: 1.1;
+          }
+
+          .meta-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-light);
+            font-weight: 500;
+          }
+
+          /* Section Styling */
+          .section {
+            margin-bottom: 60px;
+            position: relative;
+          }
+
+          .section-header {
+            display: flex;
+            align-items: baseline;
+            gap: 15px;
+            margin-bottom: 25px;
+          }
+
+          .section-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--primary);
+            font-weight: 700;
+            opacity: 0.6;
+          }
+
+          .section-title {
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+          }
+
+          .section-line {
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+          }
+
+          /* Summary Card */
+          .summary-box {
+            background: var(--bg-soft);
+            border-radius: 20px;
+            padding: 35px;
+            position: relative;
+            overflow: hidden;
+          }
+
+          .summary-box::before {
+            content: '"';
+            position: absolute;
+            top: -20px;
+            left: 20px;
+            font-family: 'Playfair Display';
+            font-size: 120px;
+            color: var(--primary);
+            opacity: 0.08;
+          }
+
+          .summary-text {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--text-main);
+            line-height: 1.7;
+            position: relative;
+            z-index: 1;
+            white-space: pre-wrap;
+          }
+
+          /* Block Cards */
+          .blocks-container {
+            display: grid;
+            gap: 30px;
+          }
+
+          .block-card {
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 30px;
+            page-break-inside: avoid;
+            transition: all 0.2s ease;
+          }
+
+          .block-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+          }
+
+          .block-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary-light);
+            color: var(--primary);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+          }
+
+          .block-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+          }
+
+          .block-body {
+            font-size: 15px;
+            color: #333;
+          }
+
+          .block-body ul {
+            padding-left: 20px;
+            margin: 0;
+          }
+
+          .block-body li {
+            margin-bottom: 10px;
+          }
+
+          /* Todo List */
+          .todo-box {
+            margin-top: 25px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+          }
+
+          .todo-row {
+            display: flex;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            align-items: flex-start;
+            gap: 15px;
+          }
+
+          .todo-row:last-child { border-bottom: none; }
+
+          .todo-check {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: var(--primary);
+            margin-top: 2px;
+            flex-shrink: 0;
+          }
+
+          .todo-content { flex: 1; }
+
+          .todo-task { font-weight: 600; font-size: 15px; }
+
+          .todo-meta {
+            display: flex;
+            gap: 15px;
+            margin-top: 5px;
+            font-size: 12px;
+            color: var(--text-light);
+          }
+
+          /* Raw Text Section */
+          .raw-section {
+            margin-top: 80px;
+            page-break-before: always;
+          }
+
+          .raw-header {
+            font-family: 'JetBrains Mono';
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--text-light);
+            margin-bottom: 20px;
+            display: block;
+            text-align: center;
+          }
+
+          .raw-wrapper {
+            background: #1c1c1e;
+            color: #d1d1d6;
+            padding: 40px;
+            border-radius: 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+          }
+
+          /* Image Handling */
+          .image-container {
+            margin-bottom: 50px;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+          }
+
+          .image-container img {
+            width: 100%;
+            display: block;
+          }
+
+          .footer {
+            margin-top: 80px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
           }
         </style>
       </head>
       <body>
-        <div class="header">
-          <div class="type-tag">${memo.type}</div>
-          <h1>${memo.title}</h1>
-          <div class="meta">生成时间: ${dateStr}</div>
-        </div>
+        <div class="container">
+          <header class="report-header">
+            <span class="type-label">${memo.type}</span>
+            <h1>${memo.title}</h1>
+            <div class="meta-bar">
+              <span>日期：${dateStr}</span>
+              <span>文档编号：SM-${memo.id.slice(-6).toUpperCase()}</span>
+            </div>
+          </header>
 
-        ${memo.imageUrl ? `<img src="${memo.imageUrl}" />` : ''}
+          ${memo.imageUrl ? `
+            <div class="image-container">
+              <img src="${memo.imageUrl}" />
+            </div>
+          ` : ''}
 
-        ${memo.content ? `
-          <div class="content-section">
-            <div class="section-title">AI 核心总结</div>
-            <div class="summary">${memo.content}</div>
-          </div>
-        ` : ''}
-
-        ${memo.blocks ? `
-          <div class="content-section">
-            <div class="section-title">详细分析</div>
-            ${memo.blocks.map(block => `
-              <div class="block">
-                <div class="block-title">${block.title || block.type.toUpperCase()}</div>
-                <div class="block-content">
-                  ${Array.isArray(block.content) ? `
-                    <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
-                  ` : `<p>${block.content}</p>`}
-                  
-                  ${block.todoItems ? `
-                    <div style="margin-top: 15px;">
-                      ${block.todoItems.map(item => `
-                        <div class="todo-item">
-                          <span class="todo-checkbox">${item.completed ? '☑' : '☐'}</span>
-                          <div class="todo-text">
-                            <div>${item.task}</div>
-                            ${item.time || item.notes ? `
-                              <div class="todo-meta">
-                                ${item.time ? `⏰ ${item.time}` : ''} 
-                                ${item.notes ? `📝 ${item.notes}` : ''}
-                              </div>
-                            ` : ''}
-                          </div>
-                        </div>
-                      `).join('')}
-                    </div>
-                  ` : ''}
-                </div>
+          ${memo.content ? `
+            <section class="section">
+              <div class="section-header">
+                <span class="section-num">01</span>
+                <span class="section-title">AI 核心总结</span>
+                <div class="section-line"></div>
               </div>
-            `).join('')}
-          </div>
-        ` : ''}
+              <div class="summary-box">
+                <div class="summary-text">${memo.content}</div>
+              </div>
+            </section>
+          ` : ''}
 
-        ${memo.rawText ? `
-          <div class="content-section" style="page-break-before: always;">
-            <div class="section-title">原始记录</div>
-            <div class="raw-text">${memo.rawText}</div>
-          </div>
-        ` : ''}
+          ${memo.blocks ? `
+            <section class="section">
+              <div class="section-header">
+                <span class="section-num">02</span>
+                <span class="section-title">结构化深度分析</span>
+                <div class="section-line"></div>
+              </div>
+              <div class="blocks-container">
+                ${memo.blocks.map((block, idx) => {
+                  const icon = block.type === 'todo' ? '✅' : 
+                               block.type === 'highlight' ? '💡' :
+                               block.type === 'quote' ? '💬' :
+                               block.type === 'step' ? '🔢' :
+                               block.type === 'bento' ? '🍱' : '📄';
+                  return `
+                    <div class="block-card">
+                      <div class="block-head">
+                        <div class="block-icon">${icon}</div>
+                        <div class="block-title">${block.title || block.type.toUpperCase()}</div>
+                      </div>
+                      <div class="block-body">
+                        ${Array.isArray(block.content) ? `
+                          <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
+                        ` : `<p>${block.content}</p>`}
+                        
+                        ${block.todoItems ? `
+                          <div class="todo-box">
+                            ${block.todoItems.map(item => `
+                              <div class="todo-row">
+                                <div class="todo-check">${item.completed ? '✓' : ''}</div>
+                                <div class="todo-content">
+                                  <div class="todo-task">${item.task}</div>
+                                  ${item.time || item.notes ? `
+                                    <div class="todo-meta">
+                                      ${item.time ? `<span>⏰ ${item.time}</span>` : ''}
+                                      ${item.notes ? `<span>📝 ${item.notes}</span>` : ''}
+                                    </div>
+                                  ` : ''}
+                                </div>
+                              </div>
+                            `).join('')}
+                          </div>
+                        ` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </section>
+          ` : ''}
+
+          ${memo.rawText ? `
+            <section class="raw-section">
+              <span class="raw-header">--- 原始记录存档 ---</span>
+              <div class="raw-wrapper">${memo.rawText}</div>
+            </section>
+          ` : ''}
+
+          <footer class="footer">
+            <span>Smart Memo AI Assistant</span>
+            <span>Page 1 of 1</span>
+          </footer>
+        </div>
 
         <script>
           window.onload = () => {
