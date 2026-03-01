@@ -288,6 +288,14 @@ async function analyzeMemo(
       - 如果是专业图表（流程图、数据图表、论文插画）：解析其逻辑结构或核心趋势。使用 step 块还原流程逻辑，使用 bento 块列出关键数据点或发现。
       - 综合分析：使用 bento 块分析用户收藏此内容的深层意图（如：审美积累、逻辑参考、数据佐证等）。`;
       break;
+    case '日常随笔':
+      systemInstruction += `\n重点：
+      1. **核心总结**：使用 highlight 块（建议用 violet 或 emerald 颜色）总结随笔的情感内核或核心感悟。
+      2. **要点提取**：使用 bento 块或 list 块，将随笔中的关键思绪、观察或知识点进行结构化拆解。
+      3. **精美排版**：将原始文字进行“精美排版”。不要只是简单复制，要通过分段、增加小标题、使用 quote 块（用于感性的句子）或 text 块（用于叙述）来重新组织。
+      4. **视觉丰富度**：充分利用不同的颜色(color)和块类型(type)来增加视觉层次感。使用“线条导引”感（通过 blocks 的顺序和逻辑连接）。
+      5. **淡雅风格**：整体色调建议偏向 slate, blue 或 violet，保持专业且淡雅的视觉风格。`;
+      break;
   }
 
   const parts: any[] = [{ text: systemInstruction }];
@@ -499,21 +507,31 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
             );
           case 'list':
             return (
-              <div key={idx} className="space-y-4 relative pl-6">
-                <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-black/5" />
-                {contentArray.map((item, lIdx) => (
-                  <div key={lIdx} className="flex items-start gap-3 text-sm text-gray-700 group">
-                    <div className="mt-2 w-1 h-1 rounded-full bg-black/20 group-hover:bg-black/40 transition-colors shrink-0" />
-                    <span className="leading-relaxed">{item}</span>
-                  </div>
-                ))}
+              <div key={idx} className="space-y-4">
+                {block.title && <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2">{block.title}</h4>}
+                <div className="space-y-3 relative pl-6">
+                  <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-black/5" />
+                  {contentArray.map((item, lIdx) => (
+                    <div key={lIdx} className="flex items-start gap-3 text-sm text-gray-700 group">
+                      <div className="mt-2 w-1 h-1 rounded-full bg-black/20 group-hover:bg-black/40 transition-colors shrink-0" />
+                      <span className="leading-relaxed">{item}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             );
           default:
             return (
-              <div key={idx} className="relative pl-6">
-                <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-black/5" />
-                <p className="text-sm text-gray-600 leading-relaxed">{contentArray[0]}</p>
+              <div key={idx} className="space-y-3">
+                {block.title && <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">{block.title}</h4>}
+                <div className="relative pl-6">
+                  <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-black/5" />
+                  <div className="space-y-3">
+                    {contentArray.map((p, pIdx) => (
+                      <p key={pIdx} className="text-sm text-gray-600 leading-relaxed">{p}</p>
+                    ))}
+                  </div>
+                </div>
               </div>
             );
         }
@@ -1354,8 +1372,16 @@ export default function App() {
                         <div class="block-title">${block.title || block.type.toUpperCase()}</div>
                       </div>
                       <div class="block-content">
-                        ${Array.isArray(block.content) ? `
+                        ${block.type === 'bento' && Array.isArray(block.content) ? `
+                          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+                            ${block.content.map(item => `
+                              <div style="padding: 15px; background: rgba(0,0,0,0.03); border-radius: 12px; font-size: 13px; font-weight: 600;">${item}</div>
+                            `).join('')}
+                          </div>
+                        ` : block.type === 'list' && Array.isArray(block.content) ? `
                           <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
+                        ` : Array.isArray(block.content) ? `
+                          ${block.content.map(p => `<p style="margin-bottom: 15px;">${p}</p>`).join('')}
                         ` : `<p>${block.content}</p>`}
                         
                         ${block.todoItems ? `
@@ -1744,8 +1770,16 @@ export default function App() {
                 <div class="block-line"></div>
                 <div class="block-title">${block.title || block.type.toUpperCase()}</div>
                 <div class="block-content">
-                  ${Array.isArray(block.content) ? `
+                  ${block.type === 'bento' && Array.isArray(block.content) ? `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
+                      ${block.content.map(item => `
+                        <div style="padding: 12px; background: #F8F8F5; border-radius: 12px; font-size: 12px; font-weight: 600; border: 1px solid rgba(0,0,0,0.03);">${item}</div>
+                      `).join('')}
+                    </div>
+                  ` : block.type === 'list' && Array.isArray(block.content) ? `
                     <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
+                  ` : Array.isArray(block.content) ? `
+                    ${block.content.map(p => `<p style="margin-bottom: 12px;">${p}</p>`).join('')}
                   ` : `<p>${block.content}</p>`}
                   
                   ${block.todoItems ? `
