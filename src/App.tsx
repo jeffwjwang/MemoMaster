@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight } from 'lucide-react';
+import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, FileAudio } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -112,6 +112,100 @@ interface Memo {
   imageUrl?: string;
   audioUrl?: string;
   timestamp: number;
+}
+
+// --- Audio Compression Utility ---
+async function compressAudio(base64: string): Promise<string> {
+  try {
+    const response = await fetch(base64);
+    const blob = await response.blob();
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    
+    // Create an offline context to "render" the audio at a lower sample rate
+    // We target 16kHz mono to significantly reduce size
+    const offlineContext = new OfflineAudioContext(
+      1, 
+      audioBuffer.length, 
+      16000
+    );
+    
+    const source = offlineContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineContext.destination);
+    source.start();
+    
+    const renderedBuffer = await offlineContext.startRendering();
+    
+    // Convert AudioBuffer to WAV (simplest browser-native format we can encode manually)
+    const wavBlob = audioBufferToWav(renderedBuffer);
+    
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(wavBlob);
+    });
+  } catch (e) {
+    console.error("Audio compression failed, using original:", e);
+    return base64;
+  }
+}
+
+// Helper to encode AudioBuffer to WAV
+function audioBufferToWav(buffer: AudioBuffer): Blob {
+  const numOfChan = buffer.numberOfChannels;
+  const length = buffer.length * numOfChan * 2 + 44;
+  const bufferArr = new ArrayBuffer(length);
+  const view = new DataView(bufferArr);
+  const channels = [];
+  let i;
+  let sample;
+  let offset = 0;
+  let pos = 0;
+
+  // write WAVE header
+  setUint32(0x46464952);                         // "RIFF"
+  setUint32(length - 8);                         // file length - 8
+  setUint32(0x45564157);                         // "WAVE"
+
+  setUint32(0x20746d66);                         // "fmt " chunk
+  setUint32(16);                                 // length = 16
+  setUint16(1);                                  // PCM (uncompressed)
+  setUint16(numOfChan);
+  setUint32(buffer.sampleRate);
+  setUint32(buffer.sampleRate * 2 * numOfChan);  // avg. bytes/sec
+  setUint16(numOfChan * 2);                      // block-align
+  setUint16(16);                                 // 16-bit (hardcoded)
+
+  setUint32(0x61746164);                         // "data" - chunk
+  setUint32(length - pos - 4);                   // chunk length
+
+  // write interleaved data
+  for(i = 0; i < buffer.numberOfChannels; i++)
+    channels.push(buffer.getChannelData(i));
+
+  while(pos < length) {
+    for(i = 0; i < numOfChan; i++) {             // interleave channels
+      sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+      sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF) | 0; // scale to 16-bit signed int
+      view.setInt16(pos, sample, true);          // write 16-bit sample
+      pos += 2;
+    }
+    offset++;                                     // next source sample
+  }
+
+  return new Blob([bufferArr], {type: "audio/wav"});
+
+  function setUint16(data: number) {
+    view.setUint16(pos, data, true);
+    pos += 2;
+  }
+
+  function setUint32(data: number) {
+    view.setUint32(pos, data, true);
+    pos += 4;
+  }
 }
 
 // --- AI Service ---
@@ -467,7 +561,9 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
   const [audio, setAudio] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -479,6 +575,18 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
         const compressed = await compressImage(reader.result as string);
         setImage(compressed);
       };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 20 * 1024 * 1024) {
+        alert("音频文件过大（建议不超过20MB），AI 分析可能会失败。");
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => setAudio(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -559,8 +667,30 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
   const handleAISave = async () => {
     if (!text && !image && !audio) return;
     setIsAnalyzing(true);
+    setAnalysisProgress('准备分析数据...');
+    
     try {
-      const analysis = await analyzeMemo(type, text, image || undefined, audio || undefined);
+      let finalAudio = audio;
+      
+      // Smart Audio Handling
+      if (audio) {
+        const audioSize = (audio.length * 3) / 4; // Approx size in bytes from base64
+        if (audioSize > 10 * 1024 * 1024) { // If > 10MB, try to compress
+          setAnalysisProgress('音频较大，正在智能压缩...');
+          try {
+            finalAudio = await compressAudio(audio);
+            const newSize = (finalAudio.length * 3) / 4;
+            console.log(`Audio compressed: ${(audioSize/1024/1024).toFixed(2)}MB -> ${(newSize/1024/1024).toFixed(2)}MB`);
+          } catch (err) {
+            console.error("Compression error:", err);
+          }
+        }
+      }
+
+      setAnalysisProgress('正在请求 Gemini AI 分析...');
+      const analysis = await analyzeMemo(type, text, image || undefined, finalAudio || undefined);
+      
+      setAnalysisProgress('正在处理分析结果...');
       onSave({
         id: Date.now().toString(),
         type,
@@ -569,18 +699,22 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
         blocks: analysis.blocks,
         rawText: text,
         imageUrl: image,
-        audioUrl: audio,
+        audioUrl: finalAudio,
         timestamp: Date.now(),
       });
+      setAnalysisProgress('完成！');
       onClose();
     } catch (error: any) {
       console.error("AI Analysis Error:", error);
+      setAnalysisProgress('');
       if (error.message === 'API_KEY_MISSING') {
         alert('请先在设置中配置 Gemini API Key');
       } else if (error.message?.includes('413') || error.message?.includes('too large')) {
-        alert('内容过大，请尝试缩短录音时长或减少图片数量');
+        alert('错误：内容过大（413 Payload Too Large）。请尝试缩短录音时长或减少图片数量。');
+      } else if (error.message?.includes('quota') || error.message?.includes('429')) {
+        alert('错误：AI 额度已耗尽或请求过于频繁，请稍后再试。');
       } else {
-        alert('分析失败，可能是因为录音过长导致超时。请尝试再次点击“AI 整理”或缩短录音。');
+        alert(`分析失败：${error.message || '未知错误'}。可能是因为录音过长导致超时。请尝试再次点击“AI 整理”或缩短录音。`);
       }
     } finally {
       setIsAnalyzing(false);
@@ -609,7 +743,12 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
             disabled={(!text && !image && !audio) || isAnalyzing}
             className={cn("text-[#007AFF] text-sm font-bold ios-button disabled:opacity-30", isAnalyzing && "flex items-center gap-1")}
           >
-            {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "AI 整理"}
+            {isAnalyzing ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-[10px] font-medium animate-pulse">{analysisProgress}</span>
+              </div>
+            ) : "AI 整理"}
           </button>
         </div>
       </div>
@@ -656,6 +795,7 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
             <span className="text-[10px] text-gray-500 font-medium">照片</span>
             <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
           </button>
+          
           <button
             onClick={() => isRecording ? stopRecording() : startRecording()}
             className="flex flex-col items-center gap-1 group select-none"
@@ -665,9 +805,19 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
             </div>
             <span className="text-[10px] text-gray-500 font-medium">{isRecording ? "正在录音 (点击停止)" : "点击录音"}</span>
           </button>
-          <button className="flex flex-col items-center gap-1 group opacity-50 cursor-not-allowed">
-            <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm border border-black/5"><TypeIcon className="w-6 h-6 text-[#007AFF]" /></div>
-            <span className="text-[10px] text-gray-500 font-medium">扫描</span>
+
+          <button onClick={() => audioFileInputRef.current?.click()} className="flex flex-col items-center gap-1 group relative">
+            <div className={cn(
+              "w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm border border-black/5 group-active:bg-gray-50",
+              type === '会议纪要' && "ring-2 ring-[#007AFF] ring-offset-2"
+            )}>
+              <FileAudio className="w-6 h-6 text-[#007AFF]" />
+            </div>
+            <span className="text-[10px] text-gray-500 font-medium">上传音频</span>
+            <input type="file" ref={audioFileInputRef} onChange={handleAudioUpload} accept="audio/*" className="hidden" />
+            {type === '会议纪要' && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#007AFF] rounded-full border-2 border-white animate-bounce" />
+            )}
           </button>
         </div>
       </div>
@@ -683,6 +833,7 @@ function ChatDialog({ memos, onClose }: { memos: Memo[]; onClose: () => void }) 
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [chatProgress, setChatProgress] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -698,11 +849,13 @@ function ChatDialog({ memos, onClose }: { memos: Memo[]; onClose: () => void }) 
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setIsLoading(true);
+    setChatProgress('正在检索相关笔记...');
 
     try {
       const apiKey = getApiKey();
       if (!apiKey) throw new Error("API_KEY_MISSING");
-
+      
+      setChatProgress('正在思考中...');
       const ai = new GoogleGenAI({ apiKey });
       const model = "gemini-3-flash-preview";
 
@@ -763,6 +916,7 @@ function ChatDialog({ memos, onClose }: { memos: Memo[]; onClose: () => void }) 
       - 使用 Markdown 格式美化你的回复。
       - 如果提到了具体的备忘录，请指明其标题。`;
 
+      setChatProgress('正在生成回复...');
       const response = await ai.models.generateContent({
         model,
         contents: [
@@ -815,8 +969,9 @@ function ChatDialog({ memos, onClose }: { memos: Memo[]; onClose: () => void }) 
         ))}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-black/5 shadow-sm">
+            <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-black/5 shadow-sm flex items-center gap-3">
               <Loader2 className="w-5 h-5 animate-spin text-[#007AFF]" />
+              <span className="text-xs text-gray-400 font-medium animate-pulse">{chatProgress}</span>
             </div>
           </div>
         )}
@@ -848,6 +1003,8 @@ export default function App() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedMemo, setSelectedMemo] = useState<Memo | null>(null);
+  const [isReAnalyzing, setIsReAnalyzing] = useState(false);
+  const [reAnalysisProgress, setReAnalysisProgress] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<MemoType | '全部'>('全部');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -861,6 +1018,103 @@ export default function App() {
   useEffect(() => {
     getAllMemos().then(setMemos).catch(console.error);
   }, []);
+
+  const formatMemoForExport = (memo: Memo): string => {
+    const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN');
+    let text = `🗓 [${memo.type}] ${memo.title}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `⏰ 生成时间: ${dateStr}\n\n`;
+
+    if (memo.content) {
+      text += `💡 AI 核心总结\n`;
+      text += `────────────────────\n`;
+      text += `${memo.content}\n\n`;
+    }
+
+    if (memo.blocks) {
+      memo.blocks.forEach(block => {
+        const icon = block.type === 'todo' ? '✅' : 
+                     block.type === 'highlight' ? '🟦' :
+                     block.type === 'quote' ? '💬' :
+                     block.type === 'step' ? '🔢' :
+                     block.type === 'bento' ? '🍱' : '📄';
+        
+        text += `${icon} ${block.title || block.type.toUpperCase()}\n`;
+        text += `────────────────────\n`;
+        
+        if (Array.isArray(block.content)) {
+          block.content.forEach(line => text += `• ${line}\n`);
+        } else {
+          text += `${block.content}\n`;
+        }
+
+        if (block.todoItems) {
+          block.todoItems.forEach(item => {
+            text += `${item.completed ? '☑️' : '⬜️'} ${item.task}\n`;
+            if (item.time) text += `   ⏰ ${item.time}\n`;
+            if (item.notes) text += `   📝 ${item.notes}\n`;
+          });
+        }
+        text += `\n`;
+      });
+    }
+
+    if (memo.rawText) {
+      text += `━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `📄 原始输入记录\n`;
+      text += `${memo.rawText}\n`;
+    }
+
+    return text;
+  };
+
+  const handleExportToNotes = async (memo: Memo) => {
+    const formattedText = formatMemoForExport(memo);
+    const files: File[] = [];
+
+    try {
+      // Convert base64 assets to Files
+      if (memo.imageUrl) {
+        const res = await fetch(memo.imageUrl);
+        const blob = await res.blob();
+        files.push(new File([blob], `image_${memo.id}.jpg`, { type: 'image/jpeg' }));
+      }
+      if (memo.audioUrl) {
+        const res = await fetch(memo.audioUrl);
+        const blob = await res.blob();
+        files.push(new File([blob], `audio_${memo.id}.wav`, { type: 'audio/wav' }));
+      }
+
+      if (navigator.share) {
+        const shareData: ShareData = {
+          title: memo.title,
+          text: formattedText,
+          files: files.length > 0 ? files : undefined
+        };
+        
+        // Check if files can be shared
+        if (files.length > 0 && navigator.canShare && !navigator.canShare({ files })) {
+          // If files can't be shared, share text only
+          await navigator.share({ title: memo.title, text: formattedText });
+        } else {
+          await navigator.share(shareData);
+        }
+      } else {
+        // Fallback: Copy to clipboard
+        await navigator.clipboard.writeText(formattedText);
+        alert('已复制精美排版文本到剪贴板（您的浏览器不支持直接导出到备忘录）');
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      // Fallback to text only share if file share fails
+      try {
+        await navigator.share({ title: memo.title, text: formattedText });
+      } catch (e) {
+        alert('导出失败，请尝试手动复制内容。');
+      }
+    }
+    setIsShareSheetOpen(false);
+  };
 
   const handleShareAsImage = async (memo: Memo) => {
     if (!printRef.current) return;
@@ -1135,6 +1389,55 @@ export default function App() {
             <div className="ios-blur sticky top-0 px-4 py-3 flex items-center justify-between">
               <button onClick={() => setSelectedMemo(null)} className="flex items-center text-[#007AFF] text-lg font-medium ios-button"><ChevronLeft className="w-6 h-6" />返回</button>
               <div className="flex gap-4">
+                <button 
+                  onClick={async () => {
+                    if (!selectedMemo || isReAnalyzing) return;
+                    setIsReAnalyzing(true);
+                    setReAnalysisProgress('准备重新分析...');
+                    try {
+                      setReAnalysisProgress('AI 正在深度思考...');
+                      const analysis = await analyzeMemo(
+                        selectedMemo.type, 
+                        selectedMemo.rawText || selectedMemo.content, 
+                        selectedMemo.imageUrl || undefined, 
+                        selectedMemo.audioUrl || undefined
+                      );
+                      setReAnalysisProgress('正在更新笔记...');
+                      const updatedMemo = {
+                        ...selectedMemo,
+                        title: analysis.title,
+                        content: analysis.summary || "",
+                        blocks: analysis.blocks,
+                      };
+                      await saveMemoToDB(updatedMemo);
+                      setMemos(memos.map(m => m.id === selectedMemo.id ? updatedMemo : m));
+                      setSelectedMemo(updatedMemo);
+                      setReAnalysisProgress('完成！');
+                    } catch (err: any) {
+                      alert(`重分析失败: ${err.message}`);
+                    } finally {
+                      setIsReAnalyzing(false);
+                      setReAnalysisProgress('');
+                    }
+                  }}
+                  disabled={isReAnalyzing}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ios-button",
+                    isReAnalyzing ? "bg-[#007AFF]/10 text-[#007AFF]" : "bg-white border border-black/5 text-gray-500"
+                  )}
+                >
+                  {isReAnalyzing ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span className="animate-pulse">{reAnalysisProgress}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#007AFF]" />
+                      AI 重新整理
+                    </>
+                  )}
+                </button>
                 <button onClick={() => handleShare(selectedMemo)} className="ios-button"><Share className="w-5 h-5 text-[#007AFF]" /></button>
                 <button onClick={() => handleDeleteMemo(selectedMemo.id)} className="ios-button"><Trash2 className="w-5 h-5 text-red-500" /></button>
               </div>
@@ -1224,6 +1527,13 @@ export default function App() {
               <h3 className="text-center text-sm font-semibold text-gray-500 mb-6">分享备忘录</h3>
               
               <div className="space-y-3">
+                <button
+                  onClick={() => handleExportToNotes(selectedMemo)}
+                  className="w-full bg-[#007AFF] py-4 rounded-2xl font-bold text-white shadow-lg shadow-[#007AFF]/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
+                >
+                  <Share className="w-5 h-5" />
+                  导出到 iPhone 备忘录
+                </button>
                 <button
                   onClick={() => handleShareAsImage(selectedMemo)}
                   className="w-full bg-white py-4 rounded-2xl font-semibold text-[#007AFF] shadow-sm active:bg-gray-50 transition-colors flex items-center justify-center gap-2"
