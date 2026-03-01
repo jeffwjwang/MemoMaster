@@ -993,20 +993,162 @@ export default function App() {
   }, []);
 
   const handleShareAsImage = async (memo: Memo) => {
-    if (!printRef.current) return;
     setIsShareSheetOpen(false);
     
     try {
-      // Wait for images to load
-      await new Promise(resolve => setTimeout(resolve, 600));
+      // Create a hidden container for high-quality rendering
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '800px'; // Fixed width for consistent layout
+      container.style.background = 'white';
+      document.body.appendChild(container);
+
+      const dateStr = new Date(memo.timestamp).toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      // Reuse the beautiful styling logic
+      container.innerHTML = `
+        <div style="padding: 60px; font-family: 'Inter', -apple-system, sans-serif; color: #1C1C1E; line-height: 1.6;">
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
+            .report-header {
+              border-left: 8px solid #007AFF;
+              padding: 20px 0 20px 30px;
+              margin-bottom: 50px;
+              background: linear-gradient(to right, #f0f7ff, transparent);
+            }
+            .type-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #007AFF; margin-bottom: 8px; display: block; }
+            h1 { font-family: 'Playfair Display', serif; font-size: 38px; font-weight: 700; margin: 0; color: #141414; line-height: 1.1; }
+            .meta-bar { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 20px; border-top: 1px solid #E5E5EA; font-size: 12px; color: #8E8E93; }
+            .section { margin-bottom: 60px; }
+            .section-header { display: flex; align-items: baseline; gap: 15px; margin-bottom: 25px; }
+            .section-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #007AFF; font-weight: 700; opacity: 0.6; }
+            .section-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: #636366; }
+            .section-line { flex: 1; height: 1px; background: #E5E5EA; }
+            .summary-box { background: #F8F9FA; border-radius: 20px; padding: 35px; position: relative; }
+            .summary-text { font-size: 18px; font-weight: 500; color: #1C1C1E; line-height: 1.7; white-space: pre-wrap; }
+            .block-card { border: 1px solid #E5E5EA; border-radius: 24px; padding: 30px; margin-bottom: 30px; background: white; }
+            .block-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+            .block-icon { width: 36px; height: 36px; background: #f0f7ff; color: #007AFF; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+            .block-title { font-size: 20px; font-weight: 700; color: #141414; }
+            .block-body { font-size: 15px; color: #333; }
+            .block-body ul { padding-left: 20px; margin: 0; }
+            .block-body li { margin-bottom: 10px; }
+            .todo-box { margin-top: 25px; background: #fff; border: 1px solid #E5E5EA; border-radius: 16px; overflow: hidden; }
+            .todo-row { display: flex; padding: 15px 20px; border-bottom: 1px solid #E5E5EA; align-items: flex-start; gap: 15px; }
+            .todo-check { width: 20px; height: 20px; border: 2px solid #007AFF; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #007AFF; margin-top: 2px; flex-shrink: 0; }
+            .todo-task { font-weight: 600; font-size: 15px; }
+            .raw-wrapper { background: #1c1c1e; color: #d1d1d6; padding: 40px; border-radius: 24px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
+            .footer { margin-top: 80px; text-align: center; font-size: 10px; color: #8E8E93; text-transform: uppercase; letter-spacing: 0.1em; border-top: 1px solid #E5E5EA; padding-top: 20px; }
+          </style>
+          
+          <div class="report-header">
+            <span class="type-label">${memo.type}</span>
+            <h1>${memo.title}</h1>
+            <div class="meta-bar">
+              <span>日期：${dateStr}</span>
+              <span>文档编号：SM-${memo.id.slice(-6).toUpperCase()}</span>
+            </div>
+          </div>
+
+          ${memo.imageUrl ? `<div style="margin-bottom: 50px; border-radius: 24px; overflow: hidden;"><img src="${memo.imageUrl}" style="width: 100%; display: block;" /></div>` : ''}
+
+          ${memo.content ? `
+            <div class="section">
+              <div class="section-header">
+                <span class="section-num">01</span>
+                <span class="section-title">AI 核心总结</span>
+                <div class="section-line"></div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-text">${memo.content}</div>
+              </div>
+            </div>
+          ` : ''}
+
+          ${memo.blocks ? `
+            <div class="section">
+              <div class="section-header">
+                <span class="section-num">02</span>
+                <span class="section-title">结构化深度分析</span>
+                <div class="section-line"></div>
+              </div>
+              <div class="blocks-container">
+                ${memo.blocks.map(block => {
+                  const icon = block.type === 'todo' ? '✅' : 
+                               block.type === 'highlight' ? '💡' :
+                               block.type === 'quote' ? '💬' :
+                               block.type === 'step' ? '🔢' :
+                               block.type === 'bento' ? '🍱' : '📄';
+                  return `
+                    <div class="block-card">
+                      <div class="block-head">
+                        <div class="block-icon">${icon}</div>
+                        <div class="block-title">${block.title || block.type.toUpperCase()}</div>
+                      </div>
+                      <div class="block-body">
+                        ${Array.isArray(block.content) ? `
+                          <ul>${block.content.map(line => `<li>${line}</li>`).join('')}</ul>
+                        ` : `<p>${block.content}</p>`}
+                        
+                        ${block.todoItems ? `
+                          <div class="todo-box">
+                            ${block.todoItems.map(item => `
+                              <div class="todo-row">
+                                <div class="todo-check">${item.completed ? '✓' : ''}</div>
+                                <div class="todo-content">
+                                  <div class="todo-task">${item.task}</div>
+                                </div>
+                              </div>
+                            `).join('')}
+                          </div>
+                        ` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${memo.rawText ? `
+            <div class="section">
+              <div class="section-header">
+                <span class="section-num">03</span>
+                <span class="section-title">原始记录存档</span>
+                <div class="section-line"></div>
+              </div>
+              <div class="raw-wrapper">${memo.rawText}</div>
+            </div>
+          ` : ''}
+
+          <div class="footer">
+            Smart Memo AI Assistant • Generated with Intelligence
+          </div>
+        </div>
+      `;
+
+      // Wait for fonts and images to load
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(printRef.current, {
-        scale: 1.5,
+      const canvas = await html2canvas(container, {
+        scale: 2, // Higher scale for better quality
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
+        allowTaint: true,
       });
+
+      // Cleanup
+      document.body.removeChild(container);
 
       canvas.toBlob(async (blob) => {
         if (!blob) return;
