@@ -663,11 +663,11 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
                        MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 
                        'audio/ogg';
       
-      // Use a lower bitrate (32kbps) to ensure long recordings (e.g. 20-30 mins) 
+      // Use a lower bitrate (16kbps) to ensure long recordings (e.g. 1 hour+) 
       // don't exceed API payload limits (approx 20MB).
       const mediaRecorder = new MediaRecorder(stream, { 
         mimeType,
-        audioBitsPerSecond: 32000 
+        audioBitsPerSecond: 16000 
       });
       
       mediaRecorderRef.current = mediaRecorder;
