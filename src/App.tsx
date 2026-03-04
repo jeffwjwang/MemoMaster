@@ -322,10 +322,18 @@ async function analyzeMemo(
 
   const parts: any[] = [{ text: systemInstruction }];
   if (text) parts.push({ text: `文字内容: ${text}` });
-  if (imageB64) parts.push({ inlineData: { mimeType: "image/jpeg", data: imageB64.split(',')[1] || imageB64 } });
+  if (imageB64) {
+    const imageData = imageB64.includes(',') ? imageB64.split(',')[1] : imageB64;
+    if (imageData) {
+      parts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
+    }
+  }
   if (audioB64) {
     const mimeMatch = audioB64.match(/^data:(audio\/[a-z0-9]+);base64,/);
-    parts.push({ inlineData: { mimeType: mimeMatch ? mimeMatch[1] : "audio/wav", data: audioB64.split(',')[1] || audioB64 } });
+    const audioData = audioB64.includes(',') ? audioB64.split(',')[1] : audioB64;
+    if (audioData) {
+      parts.push({ inlineData: { mimeType: mimeMatch ? mimeMatch[1] : "audio/wav", data: audioData } });
+    }
   }
 
   let response;
@@ -670,6 +678,13 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         
+        // If the recording is extremely short (e.g., just the header), ignore it
+        if (audioBlob.size < 500) {
+          setAudio(null);
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
         // Check size: if > 15MB, warn the user
         if (audioBlob.size > 15 * 1024 * 1024) {
           alert("录音文件过大（超过15MB），AI 分析可能会失败。建议缩短录音时长。");
@@ -715,7 +730,15 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
   };
 
   const handleAISave = async () => {
-    if (!text && !image && !audio) return;
+    const hasText = text.trim().length > 0;
+    const hasImage = !!image;
+    const hasAudio = !!audio && audio.includes(',') && audio.split(',')[1].length > 100;
+
+    if (!hasText && !hasImage && !hasAudio) {
+      alert("请先输入文字、上传图片或录制有效的语音后再进行 AI 整理。");
+      return;
+    }
+    
     setIsAnalyzing(true);
     setAnalysisProgress('准备分析数据...');
     
