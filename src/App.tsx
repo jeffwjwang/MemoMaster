@@ -1509,19 +1509,32 @@ export default function App() {
 
       canvas.toBlob(async (blob) => {
         if (!blob) return;
-        const file = new File([blob], `[${memo.type}]_${memo.title}_${new Date().toISOString().split('T')[0]}.png`, { type: 'image/png' });
+        const fileName = `[${memo.type}]_${memo.title}_${new Date().toISOString().split('T')[0]}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
         
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: memo.title,
-          });
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: memo.title,
+            });
+          } catch (err) {
+            // If share fails or is cancelled, fallback to download
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
         } else {
-          // Fallback: Download
+          // Desktop or share not supported: Direct Download
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = file.name;
+          a.download = fileName;
           a.click();
           URL.revokeObjectURL(url);
         }
