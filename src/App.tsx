@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, Check, Sparkles, Quote, Edit2 } from 'lucide-react';
+import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, Check, Sparkles, Quote, Edit2, FileAudio } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -639,6 +639,7 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -649,6 +650,22 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
       reader.onloadend = async () => {
         const compressed = await compressImage(reader.result as string);
         setImage(compressed);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAudioFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Check size: if > 15MB, warn the user
+      if (file.size > 15 * 1024 * 1024) {
+        alert("音频文件过大（超过15MB），AI 分析可能会失败。建议上传更小的文件。");
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAudio(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -872,6 +889,12 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
             <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm border border-black/5 group-active:bg-gray-50"><ImageIcon className="w-6 h-6 text-[#007AFF]" /></div>
             <span className="text-[10px] text-gray-500 font-medium">照片</span>
             <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+          </button>
+
+          <button onClick={() => audioFileInputRef.current?.click()} className="flex flex-col items-center gap-1 group">
+            <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm border border-black/5 group-active:bg-gray-50"><FileAudio className="w-6 h-6 text-[#007AFF]" /></div>
+            <span className="text-[10px] text-gray-500 font-medium">音频文件</span>
+            <input type="file" ref={audioFileInputRef} onChange={handleAudioFileUpload} accept="audio/mp3,audio/m4a,audio/mpeg,audio/x-m4a" className="hidden" />
           </button>
           
           <button
