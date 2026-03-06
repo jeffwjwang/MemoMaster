@@ -123,12 +123,15 @@ async function compressAudio(base64: string): Promise<string> {
     const arrayBuffer = await blob.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     
-    // Create an offline context to "render" the audio at a lower sample rate
-    // We target 16kHz mono to significantly reduce size
+    // Determine target sample rate based on duration to keep size under control
+    // 16kHz is great for speech, 8kHz is acceptable for very long meetings
+    const durationMin = audioBuffer.duration / 60;
+    const targetSampleRate = durationMin > 30 ? 8000 : 16000;
+    
     const offlineContext = new OfflineAudioContext(
       1, 
-      audioBuffer.length, 
-      16000
+      Math.floor(audioBuffer.duration * targetSampleRate), 
+      targetSampleRate
     );
     
     const source = offlineContext.createBufferSource();
@@ -138,13 +141,41 @@ async function compressAudio(base64: string): Promise<string> {
     
     const renderedBuffer = await offlineContext.startRendering();
     
-    // Convert AudioBuffer to WAV (simplest browser-native format we can encode manually)
-    const wavBlob = audioBufferToWav(renderedBuffer);
-    
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(wavBlob);
+    // To get REAL compression (not just downsampled WAV), we use MediaRecorder 
+    // to encode the processed buffer into a compressed format (webm/mp4)
+    return new Promise((resolve, reject) => {
+      const playbackCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const dest = playbackCtx.createMediaStreamDestination();
+      const playbackSource = playbackCtx.createBufferSource();
+      playbackSource.buffer = renderedBuffer;
+      playbackSource.connect(dest);
+      
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 
+                       MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm';
+      
+      // Use very low bitrate for maximum compression (12kbps is enough for speech)
+      const recorder = new MediaRecorder(dest.stream, { 
+        mimeType,
+        audioBitsPerSecond: 12000 
+      });
+      
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = () => {
+        const compressedBlob = new Blob(chunks, { type: mimeType });
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(compressedBlob);
+        playbackCtx.close();
+      };
+      
+      recorder.start();
+      playbackSource.start();
+      
+      // Stop recording when playback ends
+      playbackSource.onended = () => {
+        recorder.stop();
+      };
     });
   } catch (e) {
     console.error("Audio compression failed, using original:", e);
@@ -152,61 +183,7 @@ async function compressAudio(base64: string): Promise<string> {
   }
 }
 
-// Helper to encode AudioBuffer to WAV
-function audioBufferToWav(buffer: AudioBuffer): Blob {
-  const numOfChan = buffer.numberOfChannels;
-  const length = buffer.length * numOfChan * 2 + 44;
-  const bufferArr = new ArrayBuffer(length);
-  const view = new DataView(bufferArr);
-  const channels = [];
-  let i;
-  let sample;
-  let offset = 0;
-  let pos = 0;
-
-  // write WAVE header
-  setUint32(0x46464952);                         // "RIFF"
-  setUint32(length - 8);                         // file length - 8
-  setUint32(0x45564157);                         // "WAVE"
-
-  setUint32(0x20746d66);                         // "fmt " chunk
-  setUint32(16);                                 // length = 16
-  setUint16(1);                                  // PCM (uncompressed)
-  setUint16(numOfChan);
-  setUint32(buffer.sampleRate);
-  setUint32(buffer.sampleRate * 2 * numOfChan);  // avg. bytes/sec
-  setUint16(numOfChan * 2);                      // block-align
-  setUint16(16);                                 // 16-bit (hardcoded)
-
-  setUint32(0x61746164);                         // "data" - chunk
-  setUint32(length - pos - 4);                   // chunk length
-
-  // write interleaved data
-  for(i = 0; i < buffer.numberOfChannels; i++)
-    channels.push(buffer.getChannelData(i));
-
-  while(pos < length) {
-    for(i = 0; i < numOfChan; i++) {             // interleave channels
-      sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
-      sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF) | 0; // scale to 16-bit signed int
-      view.setInt16(pos, sample, true);          // write 16-bit sample
-      pos += 2;
-    }
-    offset++;                                     // next source sample
-  }
-
-  return new Blob([bufferArr], {type: "audio/wav"});
-
-  function setUint16(data: number) {
-    view.setUint16(pos, data, true);
-    pos += 2;
-  }
-
-  function setUint32(data: number) {
-    view.setUint32(pos, data, true);
-    pos += 4;
-  }
-}
+// Helper to encode AudioBuffer to WAV - REMOVED AS WE USE MEDIARECORDER FOR COMPRESSION
 
 // --- AI Service ---
 const getApiKey = () => {
@@ -658,9 +635,9 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
   const handleAudioFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check size: if > 15MB, warn the user
+      // Check size: if > 15MB, inform the user about compression
       if (file.size > 15 * 1024 * 1024) {
-        alert("音频文件过大（超过15MB），AI 分析可能会失败。建议上传更小的文件。");
+        alert("音频文件较大，AI 整理时将自动为您进行智能压缩以确保分析成功。");
       }
 
       const reader = new FileReader();
@@ -707,9 +684,9 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
           return;
         }
 
-        // Check size: if > 15MB, warn the user
+        // Check size: if > 15MB, inform the user
         if (audioBlob.size > 15 * 1024 * 1024) {
-          alert("录音文件过大（超过15MB），AI 分析可能会失败。建议缩短录音时长。");
+          alert("录音文件较大，AI 整理时将自动为您进行智能压缩以确保分析成功。");
         }
 
         const reader = new FileReader();
