@@ -266,6 +266,187 @@ async function analyzeMemo(
   const refDate = memoTimestamp ? new Date(memoTimestamp) : new Date();
   const currentTimeContext = `当前参考时间（会议开始/记录时间）是: ${refDate.toLocaleString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 
+  // --- Multi-pass Logic for Long Meetings ---
+  if (type === '会议纪要' && (audioB64 || (text && text.length > 5000))) {
+    console.log("Starting multi-pass meeting analysis...");
+    
+    // Step 1: Pre-scan to get duration and agenda
+    const preScanResponse = await ai.models.generateContent({
+      model,
+      contents: {
+        parts: [
+          { text: "你是一个会议审计专家。请分析以下会议内容（可能是音频或长文本），并返回会议元数据。注意：如果是音频，请准确估算时长。" },
+          ...(audioB64 ? [{ inlineData: { mimeType: "audio/webm", data: audioB64.split(',')[1] || audioB64 } }] : []),
+          ...(text ? [{ text: `文本内容: ${text}` }] : [])
+        ]
+      },
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            durationSeconds: { type: Type.NUMBER },
+            agenda: { type: Type.ARRAY, items: { type: Type.STRING } },
+            speakers: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["durationSeconds"]
+        }
+      }
+    });
+
+    const preScan = JSON.parse(preScanResponse.text || "{}");
+    const duration = preScan.durationSeconds || 0;
+    
+    // If shorter than 45 mins, proceed with single pass (but with the new neutral prompt)
+    if (duration <= 2700 && (!text || text.length <= 8000)) {
+      return runSinglePassAnalysis(ai, model, type, text, imageB64, audioB64, currentTimeContext, memoTimestamp);
+    }
+
+    // Step 2: Chunked Analysis
+    const chunkSize = 2400; // 40 minutes
+    const overlap = 300;    // 5 minutes
+    let allBlocks: any[] = [];
+    let currentOffset = 0;
+    let previousContext = "";
+
+    while (currentOffset < duration || (currentOffset === 0 && duration === 0)) {
+      const endOffset = currentOffset + chunkSize;
+      console.log(`Analyzing chunk: ${currentOffset}s to ${endOffset}s`);
+      
+      const chunkResponse = await ai.models.generateContent({
+        model,
+        contents: {
+          parts: [
+            { text: `你是一个会议审计专家。请分析会议中 [${currentOffset}s] 到 [${endOffset}s] 之间的内容。
+            
+            **审计要求**：
+            1. **中立理性**：严禁情感渲染，仅客观记录。
+            2. **全量发言人**：记录该时段内所有发言人的观点。
+            3. **双轴时间**：为每个块提供 absTime (现实时间) 和 relTime (相对时长)。
+            4. **上下文参考**：上一段的简要背景是：${previousContext}
+            
+            返回 JSON 格式的 blocks 数组。` },
+            ...(audioB64 ? [{ inlineData: { mimeType: "audio/webm", data: audioB64.split(',')[1] || audioB64 } }] : []),
+            ...(text ? [{ text: `文本内容: ${text}` }] : [])
+          ]
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              blocks: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    type: { type: Type.STRING, enum: ["step", "text", "bento", "list"] },
+                    title: { type: Type.STRING },
+                    speaker: { type: Type.STRING },
+                    absTime: { type: Type.STRING },
+                    relTime: { type: Type.STRING },
+                    content: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    color: { type: Type.STRING }
+                  },
+                  required: ["type", "title", "content"]
+                }
+              },
+              summaryForNextChunk: { type: Type.STRING, description: "为下一段分析提供的简要上下文" }
+            },
+            required: ["blocks"]
+          }
+        }
+      });
+
+      const chunkData = JSON.parse(chunkResponse.text || "{}");
+      if (chunkData.blocks) allBlocks = [...allBlocks, ...chunkData.blocks];
+      previousContext = chunkData.summaryForNextChunk || "";
+      
+      currentOffset += (chunkSize - overlap);
+      if (duration > 0 && currentOffset >= duration) break;
+      if (duration === 0) break; // Fallback if duration detection failed
+    }
+
+    // Step 3: Global Synthesis for Conclusions and Todos
+    console.log("Synthesizing global conclusions...");
+    const synthesisResponse = await ai.models.generateContent({
+      model,
+      contents: {
+        parts: [
+          { text: "基于以上所有分段记录，请生成最终的会议结论和待办事项。要求：详尽、重点突出、无遗漏。" },
+          { text: JSON.stringify(allBlocks.slice(-20)) } // Pass some context
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            summary: { type: Type.STRING },
+            conclusions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  type: { type: Type.STRING, enum: ["highlight", "bento"] },
+                  title: { type: Type.STRING },
+                  content: { type: Type.ARRAY, items: { type: Type.STRING } }
+                }
+              }
+            },
+            todos: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  task: { type: Type.STRING },
+                  time: { type: Type.STRING },
+                  notes: { type: Type.STRING },
+                  completed: { type: Type.BOOLEAN }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const synthesis = JSON.parse(synthesisResponse.text || "{}");
+    
+    // Combine everything
+    const finalBlocks = [
+      ...(synthesis.conclusions || []),
+      ...allBlocks,
+      {
+        type: 'todo',
+        title: '会议待办与行动项',
+        content: ['请跟进以下任务'],
+        todoItems: synthesis.todos || []
+      }
+    ];
+
+    return {
+      title: synthesis.title || "会议深度审计报告",
+      summary: synthesis.summary || "已完成全量内容还原与中立审计。",
+      blocks: finalBlocks
+    };
+  }
+
+  return runSinglePassAnalysis(ai, model, type, text, imageB64, audioB64, currentTimeContext, memoTimestamp);
+}
+
+async function runSinglePassAnalysis(
+  ai: any, 
+  model: string, 
+  type: MemoType, 
+  text?: string, 
+  imageB64?: string, 
+  audioB64?: string, 
+  currentTimeContext?: string, 
+  memoTimestamp?: number,
+  retryCount = 0
+): Promise<any> {
   let systemInstruction = `你是一位顶级的视觉化笔记与任务管理专家，擅长将杂乱的输入转化为极具设计感的结构化笔记。
   你的目标是：**全量信息迁移与视觉重构**。
   
@@ -428,7 +609,7 @@ async function analyzeMemo(
       console.warn(`AI Analysis failed, retrying... (Attempt ${retryCount + 1})`, error);
       // Wait a bit before retrying
       await new Promise(resolve => setTimeout(resolve, 2000));
-      return analyzeMemo(type, text, imageB64, audioB64, memoTimestamp, retryCount + 1);
+      return runSinglePassAnalysis(ai, model, type, text, imageB64, audioB64, currentTimeContext, memoTimestamp, retryCount + 1);
     }
     throw error;
   }
@@ -1550,6 +1731,15 @@ export default function App() {
                         <div class="block-icon-circle">${icon}</div>
                         <div class="block-title">${block.title || block.type.toUpperCase()}</div>
                       </div>
+                      
+                      ${(block.speaker || block.absTime || block.relTime) ? `
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; opacity: 0.8;">
+                          ${block.speaker ? `<span style="background: rgba(0,0,0,0.05); padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; color: #666;">${block.speaker}</span>` : ''}
+                          ${block.absTime ? `<span style="border: 1px solid rgba(0,0,0,0.1); padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #888;">${block.absTime}</span>` : ''}
+                          ${block.relTime ? `<span style="border: 1px solid rgba(0,0,0,0.1); padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; color: #888;">+${block.relTime}</span>` : ''}
+                        </div>
+                      ` : ''}
+
                       <div class="block-content">
                         ${block.type === 'bento' && Array.isArray(block.content) ? `
                           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
