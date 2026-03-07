@@ -295,39 +295,62 @@ async function analyzeMemo(
     });
 
     const preScan = JSON.parse(preScanResponse.text || "{}");
-    const duration = preScan.durationSeconds || 0;
+    let duration = preScan.durationSeconds || 0;
     
+    // Fallback: If AI fails to detect duration but it's a large audio file, assume at least 1 hour
+    if (duration === 0 && audioB64 && audioB64.length > 5 * 1024 * 1024) {
+      duration = 3600; 
+    }
+    // Fallback for text: Use character count (approx 150 words per minute)
+    if (duration === 0 && text) {
+      duration = Math.max(600, (text.length / 5)); 
+    }
+
+    console.log(`Detected duration: ${duration}s. Multi-pass threshold: 2700s`);
+
     // If shorter than 45 mins, proceed with single pass (but with the new neutral prompt)
-    if (duration <= 2700 && (!text || text.length <= 8000)) {
+    if (duration > 0 && duration <= 2700 && (!text || text.length <= 8000)) {
       return runSinglePassAnalysis(ai, model, type, text, imageB64, audioB64, currentTimeContext, memoTimestamp);
     }
 
     // Step 2: Chunked Analysis
-    const chunkSize = 2400; // 40 minutes
+    const chunkSize = 1800; // 30 minutes for better detail
     const overlap = 300;    // 5 minutes
     let allBlocks: any[] = [];
     let currentOffset = 0;
     let previousContext = "";
+    let chunkIndex = 1;
 
-    while (currentOffset < duration || (currentOffset === 0 && duration === 0)) {
+    // Safety break after 15 chunks (approx 7.5 hours)
+    while (chunkIndex <= 15 && (currentOffset < duration || (currentOffset === 0 && duration === 0))) {
       const endOffset = currentOffset + chunkSize;
-      console.log(`Analyzing chunk: ${currentOffset}s to ${endOffset}s`);
+      console.log(`Analyzing chunk ${chunkIndex}: ${currentOffset}s to ${endOffset}s`);
       
+      let chunkInput = text;
+      if (text && text.length > 8000) {
+        // Physical slicing for text
+        const charsPerSec = text.length / duration;
+        const startChar = Math.floor(currentOffset * charsPerSec);
+        const endChar = Math.floor(endOffset * charsPerSec);
+        chunkInput = text.slice(Math.max(0, startChar - 500), endChar + 500);
+      }
+
       const chunkResponse = await ai.models.generateContent({
         model,
         contents: {
           parts: [
-            { text: `你是一个会议审计专家。请分析会议中 [${currentOffset}s] 到 [${endOffset}s] 之间的内容。
+            { text: `你是一个会议审计专家。现在正在进行第 ${chunkIndex} 阶段的深度审计。
+            当前审计区间：会议开始后第 [${Math.floor(currentOffset/60)}分] 到 [${Math.floor(endOffset/60)}分]。
             
             **审计要求**：
             1. **中立理性**：严禁情感渲染，仅客观记录。
             2. **全量发言人**：记录该时段内所有发言人的观点。
             3. **双轴时间**：为每个块提供 absTime (现实时间) 和 relTime (相对时长)。
-            4. **上下文参考**：上一段的简要背景是：${previousContext}
+            4. **接力棒上下文**：上一阶段的讨论重点是：${previousContext}。请确保逻辑连贯，不要重复已记录的内容。
             
             返回 JSON 格式的 blocks 数组。` },
             ...(audioB64 ? [{ inlineData: { mimeType: "audio/webm", data: audioB64.split(',')[1] || audioB64 } }] : []),
-            ...(text ? [{ text: `文本内容: ${text}` }] : [])
+            ...(chunkInput ? [{ text: `本段文本内容: ${chunkInput}` }] : [])
           ]
         },
         config: {
@@ -351,7 +374,7 @@ async function analyzeMemo(
                   required: ["type", "title", "content"]
                 }
               },
-              summaryForNextChunk: { type: Type.STRING, description: "为下一段分析提供的简要上下文" }
+              summaryForNextChunk: { type: Type.STRING, description: "为下一段分析提供的简要上下文，包括未解决的争议或待续的话题" }
             },
             required: ["blocks"]
           }
@@ -359,22 +382,26 @@ async function analyzeMemo(
       });
 
       const chunkData = JSON.parse(chunkResponse.text || "{}");
-      if (chunkData.blocks) allBlocks = [...allBlocks, ...chunkData.blocks];
+      if (chunkData.blocks && chunkData.blocks.length > 0) {
+        allBlocks = [...allBlocks, ...chunkData.blocks];
+      }
       previousContext = chunkData.summaryForNextChunk || "";
       
       currentOffset += (chunkSize - overlap);
+      chunkIndex++;
+      
       if (duration > 0 && currentOffset >= duration) break;
-      if (duration === 0) break; // Fallback if duration detection failed
+      if (duration === 0 && chunkIndex > 1) break; 
     }
 
     // Step 3: Global Synthesis for Conclusions and Todos
-    console.log("Synthesizing global conclusions...");
+    console.log("Synthesizing global conclusions from all chunks...");
     const synthesisResponse = await ai.models.generateContent({
       model,
       contents: {
         parts: [
-          { text: "基于以上所有分段记录，请生成最终的会议结论和待办事项。要求：详尽、重点突出、无遗漏。" },
-          { text: JSON.stringify(allBlocks.slice(-20)) } // Pass some context
+          { text: "你现在是总编辑。基于以上所有分段审计记录，请生成最终的会议结论和待办事项。要求：详尽、重点突出、无遗漏。请特别关注会议中达成的共识和后续行动项。" },
+          { text: `全量记录索引：${allBlocks.map(b => `[${b.relTime}] ${b.speaker || ''}: ${b.title}`).join(' | ')}` }
         ]
       },
       config: {
