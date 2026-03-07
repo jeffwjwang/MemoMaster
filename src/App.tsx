@@ -1817,11 +1817,27 @@ export default function App() {
       `;
 
       // Wait for fonts and images to load
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
+      // Calculate dynamic scale based on content height to avoid canvas limits (approx 16k-32k px)
+      const contentHeight = container.offsetHeight;
+      let exportScale = 2.5; // Default high quality
+      
+      if (contentHeight > 8000) {
+        exportScale = 1.5;
+      }
+      if (contentHeight > 12000) {
+        exportScale = 1.0;
+      }
+      if (contentHeight > 20000) {
+        exportScale = 0.8;
+      }
+
+      console.log(`Exporting image: height=${contentHeight}px, scale=${exportScale}`);
+
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(container, {
-        scale: 3, 
+        scale: exportScale, 
         useCORS: true,
         backgroundColor: '#F2F2F7',
         logging: false,
