@@ -97,6 +97,9 @@ interface TodoItem {
 interface ContentBlock {
   type: BlockType;
   title?: string;
+  speaker?: string;
+  absTime?: string;
+  relTime?: string;
   content: string | string[];
   todoItems?: TodoItem[];
   color?: 'blue' | 'emerald' | 'amber' | 'violet' | 'rose' | 'slate';
@@ -249,6 +252,7 @@ async function analyzeMemo(
   text?: string,
   imageB64?: string,
   audioB64?: string,
+  memoTimestamp?: number,
   retryCount = 0
 ) {
   const apiKey = getApiKey();
@@ -259,8 +263,8 @@ async function analyzeMemo(
   const ai = new GoogleGenAI({ apiKey });
   const model = "gemini-3-flash-preview";
   
-  const now = new Date();
-  const currentTimeContext = `当前时间是: ${now.toLocaleString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+  const refDate = memoTimestamp ? new Date(memoTimestamp) : new Date();
+  const currentTimeContext = `当前参考时间（会议开始/记录时间）是: ${refDate.toLocaleString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
 
   let systemInstruction = `你是一位顶级的视觉化笔记与任务管理专家，擅长将杂乱的输入转化为极具设计感的结构化笔记。
   你的目标是：**全量信息迁移与视觉重构**。
@@ -304,25 +308,20 @@ async function analyzeMemo(
       4. **落地指南**：使用 "step" 块给出这个灵感的落地的可行性分析及分步骤的**具体行动指南**（不设上限，确保每一步都详尽、可执行，且符合字数限制）。`;
       break;
     case '会议纪要':
-      systemInstruction += `\n**【会议纪要专项指令：超长会议深度还原模式 - 极高密度版】**
-      1. **长音频处理与降噪**：如果附带音频，请先进行全文转录。**注意：音频可能长达 2-3 小时，请自动忽略长时间静音、背景噪音或无效寒暄，但严禁忽略任何实质性的对话、争论、决策和任务分配。**
-      2. **强制时间轴密度 (High-Granularity Timeline) - 硬性指标**：
-         - 必须使用大量 "step" 块还原会议进程。
-         - **密度要求**：对于长会议，平均每 3-5 分钟（或每个议题切换点）必须生成一个 "step" 块。
-         - **内容要求**：每个步骤必须包含具体的时间戳（如 [01:25:30]）和该阶段的**具体讨论细节**。
-         - **严禁事项**：严禁使用“讨论了某事”这种模糊表述。必须写出“谁提出了什么，理由是什么，各方反馈如何”。
-         - **失败判定**：如果 3 小时的会议你只生成了少于 20 个 "step" 块，将被视为任务失败。
-      3. **全量信息分配与角色立场**：
-         - 严禁过度浓缩。你必须将会议的每一个议程、每一项决策、每一段关键讨论都分配到对应的块中。
-         - **多方观点对比**：使用 "bento" 块详细还原不同参会者的立场和争论点（例如：张三支持 A 方案的理由 vs 李四反对的理由）。
-      4. **深度结构化要求**：
+      systemInstruction += `\n**【会议纪要专项指令：中立、全面、双时轴还原模式】**
+      1. **态度与语气**：保持绝对中立、理性的态度，严禁任何情感渲染或主观修饰词（如“热烈讨论”、“积极评价”、“深刻达成”等）。仅客观陈述事实、观点和决策。
+      2. **全量发言人提取**：必须全面扫描并提取所有发言者的贡献，严禁仅关注话语量大的主角。确保每一位参与者的关键观点、疑问或反馈都被记录并对应到具体姓名。
+      3. **双轴时间系统 (Dual-Timestamp System)**：
+         - 每个逻辑块必须包含**相对时间**（从会议开始计时的时长，格式如 01:20:15）和**绝对时间**（基于会议开始时间推算的现实时间，格式如 14:30）。
+         - 确保时间戳与会议实际进程严格对齐，严禁因内容压缩而导致时间轴错乱。
+      4. **强制时间轴密度**：
+         - 对于长会议，平均每 3-5 分钟必须生成一个逻辑块（通常是 "step" 或 "text" 块）。
+         - 每个块必须写出“谁提出了什么，理由是什么，各方反馈如何”。
+      5. **深度结构化要求**：
          - 会议背景/议程 -> 使用 "text" 块。
-         - 核心结论/决策 -> 使用 "highlight" 块（若有多个决策，请生成多个块）。
-         - 任务/待办 -> 必须使用 "todo" 块，明确负责人和截止日期（若提及）。
-      5. **视觉厚度与块数量**：
-         - 块的数量应随会议时长动态增加。
-         - **预期规模**：对于 3 小时的会议，预期生成 **50-80 个块**。严禁为了节省 Token 而牺牲细节。
-      6. **最终目标**：让未参会的人通过这份笔记也能完全还原会议的实况、逻辑、各方立场和所有产出。`;
+         - 核心结论/决策 -> 使用 "highlight" 块。
+         - 任务/待办 -> 必须使用 "todo" block，明确负责人。
+      6. **最终目标**：提供一份如同审计报告般严谨、全面且具备精确时间坐标的会议实录。`;
       break;
     case '任务清单':
       systemInstruction += `\n重点：将任务严格按类型归类，每类使用一个 todo 块。每个任务项必须包含时间、内容和要点。`;
@@ -393,6 +392,9 @@ async function analyzeMemo(
                 properties: {
                   type: { type: Type.STRING, enum: ["highlight", "step", "bento", "text", "list", "todo", "quote"] },
                   title: { type: Type.STRING, description: "块的小标题，必须存在以建立视觉索引" },
+                  speaker: { type: Type.STRING, description: "发言人姓名（仅限会议纪要类型）" },
+                  absTime: { type: Type.STRING, description: "绝对时间，格式如 14:30（仅限会议纪要类型）" },
+                  relTime: { type: Type.STRING, description: "相对时间，格式如 01:20:15（仅限会议纪要类型）" },
                   content: { 
                     type: Type.ARRAY, 
                     items: { type: Type.STRING },
@@ -426,7 +428,7 @@ async function analyzeMemo(
       console.warn(`AI Analysis failed, retrying... (Attempt ${retryCount + 1})`, error);
       // Wait a bit before retrying
       await new Promise(resolve => setTimeout(resolve, 2000));
-      return analyzeMemo(type, text, imageB64, audioB64, retryCount + 1);
+      return analyzeMemo(type, text, imageB64, audioB64, memoTimestamp, retryCount + 1);
     }
     throw error;
   }
@@ -466,6 +468,28 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           totalStepsSoFar += contentArray.length;
         }
 
+        const renderMetadata = () => {
+          if (!block.speaker && !block.absTime && !block.relTime) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-2 mb-3 no-print">
+              {block.speaker && (
+                <span className="px-2 py-0.5 rounded-md bg-black/5 text-[10px] font-bold text-gray-600 uppercase tracking-wider flex items-center gap-1">
+                  <span className="w-1 h-1 rounded-full bg-black/20" />
+                  {block.speaker}
+                </span>
+              )}
+              {(block.absTime || block.relTime) && (
+                <span className="px-2 py-0.5 rounded-md border border-black/5 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Clock className="w-3 h-3" />
+                  {block.absTime && <span>{block.absTime}</span>}
+                  {block.absTime && block.relTime && <span className="opacity-30">|</span>}
+                  {block.relTime && <span className="opacity-60">+{block.relTime}</span>}
+                </span>
+              )}
+            </div>
+          );
+        };
+
         const colorClasses = {
           blue: "bg-[#F0F7FF] border-[#E0EFFF] text-[#0056B3]",
           emerald: "bg-[#F0FDF4] border-[#DCFCE7] text-[#166534]",
@@ -488,6 +512,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           case 'todo':
             return (
               <div key={idx} className="space-y-4">
+                {renderMetadata()}
                 {block.title && (
                   <div className="flex items-center gap-3 mb-4">
                     <div className="h-[1px] flex-1 bg-black/5" />
@@ -536,6 +561,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
                 animate={{ opacity: 1, y: 0 }}
                 className={cn("p-8 rounded-3xl border border-dashed relative overflow-hidden", colorClasses)}
               >
+                {renderMetadata()}
                 <div className="absolute top-0 right-0 p-4 opacity-10">
                   <Sparkles className="w-12 h-12" />
                 </div>
@@ -546,6 +572,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           case 'quote':
             return (
               <div key={idx} className="relative py-4 px-8 border-l-[1px] border-black/20">
+                {renderMetadata()}
                 <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-black/5" />
                 <Quote className="absolute -left-3 top-0 w-6 h-6 text-black/5" />
                 <p className="text-lg font-serif italic text-gray-700 leading-relaxed">
@@ -557,6 +584,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           case 'step':
             return (
               <div key={idx} className="space-y-6 relative pl-8 py-2">
+                {renderMetadata()}
                 <div className="absolute left-[11px] top-4 bottom-4 w-[1px] bg-black/5" />
                 {contentArray.map((step, sIdx) => (
                   <div key={sIdx} className="relative">
@@ -571,17 +599,21 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
             );
           case 'bento':
             return (
-              <div key={idx} className="grid grid-cols-2 gap-4">
-                {contentArray.map((item, bIdx) => (
-                  <div key={bIdx} className={cn("p-5 rounded-2xl border border-black/5 flex flex-col justify-center min-h-[100px] shadow-sm hover:shadow-md transition-shadow", colorClasses)}>
-                    <p className="text-xs font-bold leading-relaxed tracking-tight">{item}</p>
-                  </div>
-                ))}
+              <div key={idx} className="space-y-3">
+                {renderMetadata()}
+                <div className="grid grid-cols-2 gap-4">
+                  {contentArray.map((item, bIdx) => (
+                    <div key={bIdx} className={cn("p-5 rounded-2xl border border-black/5 flex flex-col justify-center min-h-[100px] shadow-sm hover:shadow-md transition-shadow", colorClasses)}>
+                      <p className="text-xs font-bold leading-relaxed tracking-tight">{item}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             );
           case 'list':
             return (
               <div key={idx} className="space-y-4">
+                {renderMetadata()}
                 {block.title && <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2">{block.title}</h4>}
                 <div className="space-y-3 relative pl-6">
                   <div className="absolute left-0 top-2 bottom-2 w-[1px] bg-black/5" />
@@ -597,6 +629,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           default:
             return (
               <div key={idx} className="space-y-3">
+                {renderMetadata()}
                 {block.title && <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">{block.title}</h4>}
                 <div className="relative pl-6">
                   <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-black/5" />
@@ -805,6 +838,7 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
     
     try {
       let finalAudio = audio;
+      const memoTimestamp = Date.now();
       
       // Smart Audio Handling
       if (audio) {
@@ -823,11 +857,11 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
       }
 
       setAnalysisProgress('正在请求 Gemini AI 分析...');
-      const analysis = await analyzeMemo(type, text, image || undefined, finalAudio || undefined);
+      const analysis = await analyzeMemo(type, text, image || undefined, finalAudio || undefined, memoTimestamp);
       
       setAnalysisProgress('正在处理分析结果...');
       onSave({
-        id: Date.now().toString(),
+        id: memoTimestamp.toString(),
         type,
         title: analysis.title,
         content: analysis.summary || "",
@@ -835,7 +869,7 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
         rawText: text,
         imageUrl: image,
         audioUrl: finalAudio,
-        timestamp: Date.now(),
+        timestamp: memoTimestamp,
       });
       setAnalysisProgress('完成！');
       onClose();
@@ -1889,7 +1923,8 @@ export default function App() {
                         selectedMemo.type, 
                         selectedMemo.rawText || selectedMemo.content, 
                         selectedMemo.imageUrl || undefined, 
-                        selectedMemo.audioUrl || undefined
+                        selectedMemo.audioUrl || undefined,
+                        selectedMemo.timestamp
                       );
                       setReAnalysisProgress('正在更新笔记...');
                       const updatedMemo = {
