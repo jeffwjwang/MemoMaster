@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, Check, Sparkles, Quote, Edit2, FileAudio } from 'lucide-react';
+import { Plus, Search, Settings, ChevronLeft, Trash2, Share, X, Mic, Image as ImageIcon, Type as TypeIcon, Loader2, Clock, Calendar, ChevronRight, Check, Sparkles, Quote, Edit2, FileAudio, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -453,11 +453,19 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
     return [];
   };
 
+  let totalStepsSoFar = 0;
+
   return (
     <div className="space-y-8">
       {blocks.map((block, idx) => {
         if (!block) return null;
         
+        const contentArray = ensureArray(block.content);
+        const currentBlockStartStep = totalStepsSoFar;
+        if (block.type === 'step') {
+          totalStepsSoFar += contentArray.length;
+        }
+
         const colorClasses = {
           blue: "bg-[#F0F7FF] border-[#E0EFFF] text-[#0056B3]",
           emerald: "bg-[#F0FDF4] border-[#DCFCE7] text-[#166534]",
@@ -475,8 +483,6 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
           rose: "#F43F5E",
           slate: "#64748B",
         }[block.color || 'slate'];
-
-        const contentArray = ensureArray(block.content);
 
         switch (block.type) {
           case 'todo':
@@ -556,7 +562,7 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
                   <div key={sIdx} className="relative">
                     <div className="absolute -left-[25px] top-1.5 w-2 h-2 rounded-full bg-white border border-black/20 shadow-sm z-10" />
                     <div className="flex flex-col gap-1">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Step {sIdx + 1}</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Step {currentBlockStartStep + sIdx + 1}</span>
                       <p className="text-sm font-medium text-gray-800 leading-relaxed">{step}</p>
                     </div>
                   </div>
@@ -2084,7 +2090,31 @@ export default function App() {
                       <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Audio Recording</span>
                     </div>
-                    <audio controls src={selectedMemo.audioUrl} className="w-full" />
+                    <audio 
+                      controls 
+                      src={selectedMemo.audioUrl} 
+                      className="w-full" 
+                      onLoadedMetadata={(e) => {
+                        const audio = e.currentTarget;
+                        if (audio.duration === Infinity || audio.duration === 0 || isNaN(audio.duration)) {
+                          audio.currentTime = 1e101;
+                          audio.ontimeupdate = () => {
+                            audio.ontimeupdate = null;
+                            audio.currentTime = 0;
+                          };
+                        }
+                      }}
+                    />
+                    <div className="mt-4 flex justify-end">
+                      <a 
+                        href={selectedMemo.audioUrl} 
+                        download={`recording-${selectedMemo.id}.webm`}
+                        className="text-[10px] font-bold text-[#007AFF] uppercase tracking-widest flex items-center gap-1 hover:opacity-70 transition-opacity"
+                      >
+                        <Download className="w-3 h-3" />
+                        下载原始音频
+                      </a>
+                    </div>
                   </div>
                 )}
 
