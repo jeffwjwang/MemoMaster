@@ -400,7 +400,11 @@ async function analyzeMemo(
       model,
       contents: {
         parts: [
-          { text: "你现在是总编辑。基于以上所有分段审计记录，请生成最终的会议结论和待办事项。要求：详尽、重点突出、无遗漏。请特别关注会议中达成的共识和后续行动项。" },
+          { text: `你现在是总编辑。基于以上所有分段审计记录，请完成以下任务：
+          1. **核心洞察 (summary)**：用一句话精炼地总结整场会议的核心价值或最重大的决定。
+          2. **审计标题 (title)**：为这份报告起一个专业且具有辨识度的标题。
+          3. **深度结论 (conclusions)**：汇总全场达成的共识、关键决策和重要争议。
+          4. **行动项 (todos)**：整理出所有明确的待办事项。` },
           { text: `全量记录索引：${allBlocks.map(b => `[${b.relTime}] ${b.speaker || ''}: ${b.title}`).join(' | ')}` }
         ]
       },
@@ -409,8 +413,8 @@ async function analyzeMemo(
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            title: { type: Type.STRING },
-            summary: { type: Type.STRING },
+            title: { type: Type.STRING, description: "会议审计报告标题" },
+            summary: { type: Type.STRING, description: "AI Core Insight：整场会议的核心精炼表达，严禁使用占位符，必须包含实质内容" },
             conclusions: {
               type: Type.ARRAY,
               items: {
@@ -455,7 +459,7 @@ async function analyzeMemo(
 
     return {
       title: synthesis.title || "会议深度审计报告",
-      summary: synthesis.summary || "已完成全量内容还原与中立审计。",
+      summary: synthesis.summary || "本次会议已完成全量审计，涵盖了所有关键议程与决策点。",
       blocks: finalBlocks
     };
   }
