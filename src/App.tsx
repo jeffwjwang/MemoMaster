@@ -232,8 +232,16 @@ function audioBufferToWav(buffer: AudioBuffer): Blob {
 
 // --- AI Service ---
 const getApiKey = () => {
-  const savedKey = typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null;
-  return savedKey || process.env.GEMINI_API_KEY || "";
+  try {
+    const savedKey = typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null;
+    if (savedKey) return savedKey;
+  } catch (e) {
+    console.error("LocalStorage access error:", e);
+  }
+  
+  // Use import.meta.env for Vite compatibility, fallback to process.env if defined by Vite
+  // @ts-ignore
+  return (import.meta.env.VITE_GEMINI_API_KEY) || (typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : "") || "";
 };
 
 async function analyzeMemo(
@@ -1145,7 +1153,13 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMemo, setChatMemo] = useState<Memo | null>(null);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [apiKey, setApiKey] = useState(() => {
+    try {
+      return localStorage.getItem('gemini_api_key') || '';
+    } catch (e) {
+      return '';
+    }
+  });
 
   const [isEditing, setIsEditing] = useState(false);
   const [editMemo, setEditMemo] = useState<Memo | null>(null);
@@ -1695,9 +1709,13 @@ export default function App() {
     .sort((a, b) => b.timestamp - a.timestamp);
 
   const handleSaveApiKey = () => {
-    localStorage.setItem('gemini_api_key', apiKey);
-    setIsSettingsOpen(false);
-    alert('API Key 已保存');
+    try {
+      localStorage.setItem('gemini_api_key', apiKey);
+      setIsSettingsOpen(false);
+      alert('API Key 已保存');
+    } catch (e) {
+      alert('无法保存 API Key，请检查浏览器隐私设置');
+    }
   };
 
   return (
