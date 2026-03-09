@@ -115,6 +115,8 @@ interface Memo {
   imageUrl?: string;
   audioUrl?: string;
   timestamp: number;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  error?: string;
 }
 
 // --- Audio Compression Utility ---
@@ -137,7 +139,7 @@ async function compressAudio(base64: string): Promise<string> {
     }
 
     // If it's already a compressed format and under 20MB, return as is to save memory
-    if (blob.type.includes('mpeg') || blob.type.includes('mp3') || blob.type.includes('m4a')) {
+    if (blob.type.includes('mpeg') || blob.type.includes('mp3') || blob.type.includes('m4a') || blob.type.includes('webm')) {
       return base64;
     }
 
@@ -270,13 +272,17 @@ async function analyzeMemo(
   if (type === '会议纪要' && (audioB64 || (text && text.length > 5000))) {
     console.log("Starting multi-pass meeting analysis...");
     
+    const audioMimeMatch = audioB64 ? audioB64.match(/^data:(audio\/[a-z0-9]+);base64,/) : null;
+    const audioMimeType = audioMimeMatch ? audioMimeMatch[1] : "audio/webm";
+    const audioData = audioB64 ? (audioB64.includes(',') ? audioB64.split(',')[1] : audioB64) : null;
+
     // Step 1: Pre-scan to get duration and agenda
     const preScanResponse = await ai.models.generateContent({
       model,
       contents: {
         parts: [
           { text: "你是一个会议审计专家。请分析以下会议内容（可能是音频或长文本），并返回会议元数据。注意：如果是音频，请准确估算时长。" },
-          ...(audioB64 ? [{ inlineData: { mimeType: "audio/webm", data: audioB64.split(',')[1] || audioB64 } }] : []),
+          ...(audioData ? [{ inlineData: { mimeType: audioMimeType, data: audioData } }] : []),
           ...(text ? [{ text: `文本内容: ${text}` }] : [])
         ]
       },
@@ -335,24 +341,28 @@ async function analyzeMemo(
         chunkInput = text.slice(Math.max(0, startChar - 500), endChar + 500);
       }
 
-      const chunkResponse = await ai.models.generateContent({
-        model,
-        contents: {
-          parts: [
-            { text: `你是一个会议审计专家。现在正在进行第 ${chunkIndex} 阶段的深度审计。
-            当前审计区间：会议开始后第 [${Math.floor(currentOffset/60)}分] 到 [${Math.floor(endOffset/60)}分]。
-            
-            **审计要求**：
-            1. **中立理性**：严禁情感渲染，仅客观记录。
-            2. **全量发言人**：记录该时段内所有发言人的观点。
-            3. **双轴时间**：为每个块提供 absTime (现实时间) 和 relTime (相对时长)。
-            4. **接力棒上下文**：上一阶段的讨论重点是：${previousContext}。请确保逻辑连贯，不要重复已记录的内容。
-            
-            返回 JSON 格式的 blocks 数组。` },
-            ...(audioB64 ? [{ inlineData: { mimeType: "audio/webm", data: audioB64.split(',')[1] || audioB64 } }] : []),
-            ...(chunkInput ? [{ text: `本段文本内容: ${chunkInput}` }] : [])
-          ]
-        },
+        const audioMimeMatch = audioB64 ? audioB64.match(/^data:(audio\/[a-z0-9]+);base64,/) : null;
+        const audioMimeType = audioMimeMatch ? audioMimeMatch[1] : "audio/webm";
+        const audioData = audioB64 ? (audioB64.includes(',') ? audioB64.split(',')[1] : audioB64) : null;
+
+        const chunkResponse = await ai.models.generateContent({
+          model,
+          contents: {
+            parts: [
+              { text: `你是一个会议审计专家。现在正在进行第 ${chunkIndex} 阶段的深度审计。
+              当前审计区间：会议开始后第 [${Math.floor(currentOffset/60)}分] 到 [${Math.floor(endOffset/60)}分]。
+              
+              **审计要求**：
+              1. **中立理性**：严禁情感渲染，仅客观记录。
+              2. **全量发言人**：记录该时段内所有发言人的观点。
+              3. **双轴时间**：为每个块提供 absTime (现实时间) 和 relTime (相对时长)。
+              4. **接力棒上下文**：上一阶段的讨论重点是：${previousContext}。请确保逻辑连贯，不要重复已记录的内容。
+              
+              返回 JSON 格式的 blocks 数组。` },
+              ...(audioData ? [{ inlineData: { mimeType: audioMimeType, data: audioData } }] : []),
+              ...(chunkInput ? [{ text: `本段文本内容: ${chunkInput}` }] : [])
+            ]
+          },
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -861,18 +871,37 @@ function StructuredRenderer({ blocks, onToggleTodo }: { blocks: ContentBlock[]; 
 
 function MemoCard({ memo, onClick }: { memo: Memo; onClick: () => void }) {
   const date = new Date(memo.timestamp);
+  const isProcessing = memo.status === 'processing';
+
   return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={onClick}
-      className="bg-white rounded-3xl p-5 mb-4 cursor-pointer active:scale-[0.98] transition-all border border-black/[0.03] shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
+      className={cn(
+        "bg-white rounded-3xl p-5 mb-4 transition-all border border-black/[0.03] shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] cursor-pointer active:scale-[0.98]",
+        isProcessing && "opacity-80"
+      )}
     >
       <div className="flex justify-between items-center mb-3">
-        <span className="px-2 py-0.5 bg-[#1A1A1A]/5 text-[#1A1A1A] text-[9px] font-bold rounded uppercase tracking-[0.15em]">
-          {memo.type}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-[#1A1A1A]/5 text-[#1A1A1A] text-[9px] font-bold rounded uppercase tracking-[0.15em]">
+            {memo.type}
+          </span>
+          {isProcessing && (
+            <span className="flex items-center gap-1 px-2 py-0.5 bg-[#007AFF]/10 text-[#007AFF] text-[9px] font-bold rounded uppercase tracking-[0.15em] animate-pulse">
+              <Loader2 className="w-2 h-2 animate-spin" />
+              AI 整理中...
+            </span>
+          )}
+          {memo.status === 'failed' && (
+            <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-500 text-[9px] font-bold rounded uppercase tracking-[0.15em]">
+              <X className="w-2 h-2" />
+              分析失败
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1 text-gray-400 text-[9px] font-medium uppercase tracking-wider">
           <Clock className="w-3 h-3" />
           {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -880,7 +909,12 @@ function MemoCard({ memo, onClick }: { memo: Memo; onClick: () => void }) {
       </div>
       <h3 className="text-xl font-serif font-bold text-[#1A1A1A] mb-2 line-clamp-1 leading-tight">{memo.title}</h3>
       <div className="text-sm text-gray-500 line-clamp-2 mb-4 leading-relaxed font-medium">
-        {memo.blocks && Array.isArray(memo.blocks) ? (
+        {isProcessing ? (
+          <div className="flex flex-col gap-2">
+            <div className="h-4 bg-gray-100 rounded-md w-full animate-pulse" />
+            <div className="h-4 bg-gray-100 rounded-md w-2/3 animate-pulse" />
+          </div>
+        ) : memo.blocks && Array.isArray(memo.blocks) ? (
           <p>
             {(() => {
               const firstTextBlock = memo.blocks.find(b => b.type === 'text' || b.type === 'highlight');
@@ -920,8 +954,6 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
   const [image, setImage] = useState<string | null>(null);
   const [audio, setAudio] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -1045,61 +1077,24 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
       return;
     }
     
-    setIsAnalyzing(true);
-    setAnalysisProgress('准备分析数据...');
-    
-    try {
-      let finalAudio = audio;
-      const memoTimestamp = Date.now();
-      
-      // Smart Audio Handling
-      if (audio) {
-        const audioSize = (audio.length * 3) / 4; // Approx size in bytes from base64
-        // Only trigger compression if it's truly large (>15MB)
-        if (audioSize > 15 * 1024 * 1024) { 
-          setAnalysisProgress('音频较大，正在智能处理...');
-          try {
-            finalAudio = await compressAudio(audio);
-            const newSize = (finalAudio.length * 3) / 4;
-            console.log(`Audio processed: ${(audioSize/1024/1024).toFixed(2)}MB -> ${(newSize/1024/1024).toFixed(2)}MB`);
-          } catch (err) {
-            console.error("Compression error:", err);
-          }
-        }
-      }
+    const memoTimestamp = Date.now();
+    const firstLine = text.split('\n')[0].trim();
+    const initialTitle = firstLine.length > 0 ? (firstLine.length > 20 ? firstLine.substring(0, 20) + '...' : firstLine) : (image ? '图片分析中...' : '语音分析中...');
 
-      setAnalysisProgress('正在请求 Gemini AI 分析...');
-      const analysis = await analyzeMemo(type, text, image || undefined, finalAudio || undefined, memoTimestamp);
-      
-      setAnalysisProgress('正在处理分析结果...');
-      onSave({
-        id: memoTimestamp.toString(),
-        type,
-        title: analysis.title,
-        content: analysis.summary || "",
-        blocks: analysis.blocks,
-        rawText: text,
-        imageUrl: image,
-        audioUrl: finalAudio,
-        timestamp: memoTimestamp,
-      });
-      setAnalysisProgress('完成！');
-      onClose();
-    } catch (error: any) {
-      console.error("AI Analysis Error:", error);
-      setAnalysisProgress('');
-      if (error.message === 'API_KEY_MISSING') {
-        alert('请先在设置中配置 Gemini API Key');
-      } else if (error.message?.includes('413') || error.message?.includes('too large')) {
-        alert('错误：内容过大（413 Payload Too Large）。请尝试缩短录音时长或减少图片数量。');
-      } else if (error.message?.includes('quota') || error.message?.includes('429')) {
-        alert('错误：AI 额度已耗尽或请求过于频繁，请稍后再试。');
-      } else {
-        alert(`分析失败：${error.message || '未知错误'}。可能是因为录音过长导致超时。请尝试再次点击“AI 整理”或缩短录音。`);
-      }
-    } finally {
-      setIsAnalyzing(false);
-    }
+    // Save immediately with processing status
+    onSave({
+      id: memoTimestamp.toString(),
+      type,
+      title: initialTitle,
+      content: "AI 正在深度整理中，请稍候...",
+      rawText: text,
+      imageUrl: image,
+      audioUrl: audio,
+      timestamp: memoTimestamp,
+      status: 'processing'
+    });
+    
+    onClose();
   };
 
   return (
@@ -1114,22 +1109,17 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
         <div className="flex gap-3">
           <button
             onClick={handleDirectSave}
-            disabled={(!text && !image && !audio) || isAnalyzing}
+            disabled={(!text && !image && !audio)}
             className="text-gray-500 text-sm font-medium ios-button disabled:opacity-30"
           >
             直接保存
           </button>
           <button
             onClick={handleAISave}
-            disabled={(!text && !image && !audio) || isAnalyzing}
-            className={cn("text-[#007AFF] text-sm font-bold ios-button disabled:opacity-30", isAnalyzing && "flex items-center gap-1")}
+            disabled={(!text && !image && !audio)}
+            className="text-[#007AFF] text-sm font-bold ios-button disabled:opacity-30"
           >
-            {isAnalyzing ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-[10px] font-medium animate-pulse">{analysisProgress}</span>
-              </div>
-            ) : "AI 整理"}
+            AI 整理
           </button>
         </div>
       </div>
@@ -1180,7 +1170,7 @@ function MemoCreator({ onClose, onSave }: { onClose: () => void; onSave: (memo: 
           <button onClick={() => audioFileInputRef.current?.click()} className="flex flex-col items-center gap-1 group">
             <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm border border-black/5 group-active:bg-gray-50"><FileAudio className="w-6 h-6 text-[#007AFF]" /></div>
             <span className="text-[10px] text-gray-500 font-medium">音频文件</span>
-            <input type="file" ref={audioFileInputRef} onChange={handleAudioFileUpload} accept="audio/mp3,audio/m4a,audio/mpeg,audio/x-m4a" className="hidden" />
+            <input type="file" ref={audioFileInputRef} onChange={handleAudioFileUpload} accept="audio/mp3,audio/m4a,audio/mpeg,audio/x-m4a,audio/webm" className="hidden" />
           </button>
           
           <button
@@ -1398,8 +1388,11 @@ export default function App() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedMemo, setSelectedMemo] = useState<Memo | null>(null);
-  const [isReAnalyzing, setIsReAnalyzing] = useState(false);
-  const [reAnalysisProgress, setReAnalysisProgress] = useState('');
+  const selectedMemoRef = useRef<Memo | null>(null);
+  
+  useEffect(() => {
+    selectedMemoRef.current = selectedMemo;
+  }, [selectedMemo]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<MemoType | '全部'>('全部');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1419,9 +1412,74 @@ export default function App() {
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
+  const processMemoBackground = async (memo: Memo) => {
+    try {
+      let finalAudio = memo.audioUrl;
+      
+      // Smart Audio Handling in background
+      if (finalAudio) {
+        const audioSize = (finalAudio.length * 3) / 4;
+        if (audioSize > 15 * 1024 * 1024) {
+          try {
+            finalAudio = await compressAudio(finalAudio);
+          } catch (err) {
+            console.error("Background compression error:", err);
+          }
+        }
+      }
+
+      const analysis = await analyzeMemo(
+        memo.type, 
+        memo.rawText || "", 
+        memo.imageUrl || undefined, 
+        finalAudio || undefined, 
+        memo.timestamp
+      );
+
+      const updatedMemo: Memo = {
+        ...memo,
+        title: analysis.title,
+        content: analysis.summary || "",
+        blocks: analysis.blocks,
+        audioUrl: finalAudio,
+        status: 'completed'
+      };
+
+      await saveMemoToDB(updatedMemo);
+      setMemos(prev => prev.map(m => m.id === memo.id ? updatedMemo : m));
+      
+      // If the user is currently viewing this memo, update it
+      if (selectedMemoRef.current?.id === memo.id) {
+        setSelectedMemo(updatedMemo);
+      }
+    } catch (error: any) {
+      console.error("Background AI Analysis Error:", error);
+      const failedMemo: Memo = {
+        ...memo,
+        status: 'failed',
+        error: error.message || 'AI 分析失败'
+      };
+      await saveMemoToDB(failedMemo);
+      setMemos(prev => prev.map(m => m.id === memo.id ? failedMemo : m));
+      
+      // If the user is currently viewing this memo, update it
+      if (selectedMemoRef.current?.id === memo.id) {
+        setSelectedMemo(failedMemo);
+      }
+    }
+  };
+
   // Load from IndexedDB on mount
   useEffect(() => {
-    getAllMemos().then(setMemos).catch(console.error);
+    getAllMemos().then(loadedMemos => {
+      setMemos(loadedMemos);
+      // Resume background processing for any memos that were interrupted
+      loadedMemos.forEach(m => {
+        if (m.status === 'processing') {
+          processMemoBackground(m);
+        }
+      });
+    }).catch(console.error);
   }, []);
 
   const handleShareAsImage = async (memo: Memo) => {
@@ -1918,6 +1976,10 @@ export default function App() {
   const handleSaveMemo = async (newMemo: Memo) => {
     await saveMemoToDB(newMemo);
     setMemos([newMemo, ...memos]);
+    
+    if (newMemo.status === 'processing') {
+      processMemoBackground(newMemo);
+    }
   };
 
   const handleDeleteMemo = async (id: string) => {
@@ -2150,47 +2212,28 @@ export default function App() {
                       编辑文字
                     </button>
                     <button 
-                      onClick={async () => {
-                    if (!selectedMemo || isReAnalyzing) return;
-                    setIsReAnalyzing(true);
-                    setReAnalysisProgress('准备重新分析...');
-                    try {
-                      setReAnalysisProgress('AI 正在深度思考...');
-                      const analysis = await analyzeMemo(
-                        selectedMemo.type, 
-                        selectedMemo.rawText || selectedMemo.content, 
-                        selectedMemo.imageUrl || undefined, 
-                        selectedMemo.audioUrl || undefined,
-                        selectedMemo.timestamp
-                      );
-                      setReAnalysisProgress('正在更新笔记...');
-                      const updatedMemo = {
-                        ...selectedMemo,
-                        title: analysis.title,
-                        content: analysis.summary || "",
-                        blocks: analysis.blocks,
-                      };
-                      await saveMemoToDB(updatedMemo);
-                      setMemos(memos.map(m => m.id === selectedMemo.id ? updatedMemo : m));
-                      setSelectedMemo(updatedMemo);
-                      setReAnalysisProgress('完成！');
-                    } catch (err: any) {
-                      alert(`重分析失败: ${err.message}`);
-                    } finally {
-                      setIsReAnalyzing(false);
-                      setReAnalysisProgress('');
-                    }
-                  }}
-                  disabled={isReAnalyzing}
+                      onClick={() => {
+                        if (!selectedMemo || selectedMemo.status === 'processing') return;
+                        
+                        const processingMemo: Memo = {
+                          ...selectedMemo,
+                          status: 'processing'
+                        };
+                        
+                        setMemos(memos.map(m => m.id === selectedMemo.id ? processingMemo : m));
+                        setSelectedMemo(processingMemo);
+                        processMemoBackground(processingMemo);
+                      }}
+                  disabled={selectedMemo.status === 'processing'}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ios-button",
-                    isReAnalyzing ? "bg-[#007AFF]/10 text-[#007AFF]" : "bg-white border border-black/5 text-gray-500"
+                    selectedMemo.status === 'processing' ? "bg-[#007AFF]/10 text-[#007AFF]" : "bg-white border border-black/5 text-gray-500"
                   )}
                 >
-                  {isReAnalyzing ? (
+                  {selectedMemo.status === 'processing' ? (
                     <>
                       <Loader2 className="w-3 h-3 animate-spin" />
-                      <span className="animate-pulse">{reAnalysisProgress}</span>
+                      <span className="animate-pulse">AI 正在深度思考...</span>
                     </>
                   ) : (
                     <>
@@ -2316,6 +2359,33 @@ export default function App() {
                 </div>
                 
                 <h2 className="text-4xl font-serif font-bold mb-10 text-[#1A1A1A] leading-tight tracking-tight">{selectedMemo.title}</h2>
+                
+                {selectedMemo.status === 'processing' && (
+                  <div className="mb-12 p-10 bg-[#007AFF]/5 rounded-[2.5rem] border border-[#007AFF]/10 flex flex-col items-center justify-center text-center">
+                    <Loader2 className="w-10 h-10 animate-spin text-[#007AFF] mb-4" />
+                    <h4 className="text-lg font-bold text-[#007AFF] mb-2">AI 正在深度整理中</h4>
+                    <p className="text-sm text-gray-500">这可能需要几分钟时间，您可以先处理其他任务，整理完成后将自动更新。</p>
+                  </div>
+                )}
+
+                {selectedMemo.status === 'failed' && (
+                  <div className="mb-12 p-10 bg-red-50 rounded-[2.5rem] border border-red-100 flex flex-col items-center justify-center text-center">
+                    <X className="w-10 h-10 text-red-500 mb-4" />
+                    <h4 className="text-lg font-bold text-red-500 mb-2">AI 分析失败</h4>
+                    <p className="text-sm text-gray-500 mb-4">{selectedMemo.error || '可能是因为录音过长导致超时。'}</p>
+                    <button 
+                      onClick={() => {
+                        const processingMemo: Memo = { ...selectedMemo, status: 'processing', error: undefined };
+                        setMemos(memos.map(m => m.id === selectedMemo.id ? processingMemo : m));
+                        setSelectedMemo(processingMemo);
+                        processMemoBackground(processingMemo);
+                      }}
+                      className="px-6 py-2 bg-red-500 text-white rounded-full text-sm font-bold ios-button"
+                    >
+                      重试分析
+                    </button>
+                  </div>
+                )}
                 
                 {selectedMemo.imageUrl && (
                   <div className="mb-12 rounded-3xl overflow-hidden shadow-2xl shadow-black/5 border border-black/5">
